@@ -564,16 +564,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                 : (isSelected
                                                       ? colorScheme.primary
                                                             .withValues(
-                                                              alpha: 0.15,
+                                                              alpha: 0.22,
                                                             )
-                                                      : (isToday
-                                                            ? colorScheme
-                                                                  .secondaryContainer
-                                                                  .withValues(
-                                                                    alpha: 0.4,
-                                                                  )
-                                                            : Colors
-                                                                  .transparent)),
+                                                      : Colors.transparent),
                                             border: Border(
                                               right: BorderSide(
                                                 color: (index % 7 != 6)
@@ -606,32 +599,50 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                     ),
                                                 child: Align(
                                                   alignment: Alignment.topRight,
-                                                  child: Text(
-                                                    '${date.day}',
-                                                    style: TextStyle(
-                                                      fontSize: 11,
-                                                      fontWeight:
-                                                          isToday ||
-                                                              isSelected ||
-                                                              isInDragRange
-                                                          ? FontWeight.bold
-                                                          : FontWeight.normal,
-                                                      color: !isCurrentMonth
-                                                          ? (isDark
-                                                                ? Colors
-                                                                      .grey[700]
-                                                                : Colors
-                                                                      .grey[400])
-                                                          : (date.weekday == 7
-                                                                ? Colors
-                                                                      .red[400]
-                                                                : (date.weekday ==
-                                                                          6
-                                                                      ? Colors
-                                                                            .blue[400]
-                                                                      : (isDark
-                                                                            ? Colors.grey[300]
-                                                                            : Colors.grey[750]))),
+                                                  child: Container(
+                                                    padding: isToday
+                                                        ? const EdgeInsets.symmetric(
+                                                            horizontal: 5,
+                                                            vertical: 1,
+                                                          )
+                                                        : EdgeInsets.zero,
+                                                    decoration: isToday
+                                                        ? BoxDecoration(
+                                                            color: colorScheme
+                                                                .primary,
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  10,
+                                                                ),
+                                                          )
+                                                        : null,
+                                                    child: Text(
+                                                      '${date.day}',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight:
+                                                            isToday ||
+                                                                isSelected ||
+                                                                isInDragRange
+                                                            ? FontWeight.bold
+                                                            : FontWeight.normal,
+                                                        color: isToday
+                                                            ? colorScheme
+                                                                  .onPrimary
+                                                            : (!isCurrentMonth
+                                                                  ? (isDark
+                                                                        ? Colors
+                                                                              .grey[700]
+                                                                        : Colors
+                                                                              .grey[400])
+                                                                  : (date.weekday ==
+                                                                            7
+                                                                        ? Colors
+                                                                              .red[400]
+                                                                        : (date.weekday == 6
+                                                                              ? Colors.blue[400]
+                                                                              : (isDark ? Colors.grey[300] : Colors.grey[750])))),
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
