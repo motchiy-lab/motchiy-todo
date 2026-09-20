@@ -1,4 +1,4 @@
-package com.example.motchiy_task_manager
+package com.example.motchiy_todo
 
 import io.flutter.embedding.android.FlutterActivity
 
