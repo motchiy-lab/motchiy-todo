@@ -425,7 +425,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
     final completedTasks = _getCompletedTasks();
 
     return SafeArea(
-      top: false,
+      top: true,
       child: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Align(
@@ -435,7 +435,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
