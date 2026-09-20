@@ -6,6 +6,7 @@ import 'idea_screen.dart';
 import 'settings_screen.dart';
 import 'task_home_screen.dart';
 import 'wishlist_screen.dart';
+import '../main.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -311,18 +312,26 @@ class _NavItemState extends State<_NavItem> {
                   ),
                 ),
               ),
-              if (_isHovered)
+              if (showNavLabelsOnHoverNotifier.value && _isHovered)
                 Positioned(
                   bottom: 10, // 文字をアイコンに近づける
-                  child: Text(
-                    widget.label,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                      color: color,
-                    ),
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: showNavLabelsOnHoverNotifier,
+                    builder: (context, showLabel, child) {
+                      if (!showLabel || !_isHovered) {
+                        return const SizedBox.shrink();
+                      }
+                      return Text(
+                        widget.label,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: color,
+                        ),
+                      );
+                    },
                   ),
                 ),
             ],
@@ -407,22 +416,27 @@ class _CenterNavItemState extends State<_CenterNavItem> {
                   ),
                 ),
               ),
-              if (_isHovered)
-                Positioned(
-                  bottom: 0, // 中央ボタンの文字をアイコンに近づける
-                  child: Text(
-                    widget.label,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                      color: isSelected
-                          ? colorScheme.primary
-                          : Colors.grey[700],
+              ValueListenableBuilder<bool>(
+                valueListenable: showNavLabelsOnHoverNotifier,
+                builder: (context, showLabel, child) {
+                  if (!showLabel || !_isHovered) return const SizedBox.shrink();
+                  return Positioned(
+                    bottom: 0, // 中央ボタンの文字をアイコンに近づける
+                    child: Text(
+                      widget.label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        color: isSelected
+                            ? colorScheme.primary
+                            : Colors.grey[700],
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
+              ),
             ],
           ),
         ),

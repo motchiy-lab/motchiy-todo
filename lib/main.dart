@@ -26,11 +26,24 @@ final List<String> appThemeNames = [
 ];
 
 final ValueNotifier<int> themeIndexNotifier = ValueNotifier<int>(0);
+final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier<ThemeMode>(
+  ThemeMode.system,
+);
+final ValueNotifier<bool> showNavLabelsOnHoverNotifier = ValueNotifier<bool>(
+  true,
+);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
   themeIndexNotifier.value = prefs.getInt('theme_color_index') ?? 0;
+
+  final int themeModeIndex = prefs.getInt('theme_mode_index') ?? 0;
+  themeModeNotifier.value =
+      ThemeMode.values[themeModeIndex.clamp(0, ThemeMode.values.length - 1)];
+
+  showNavLabelsOnHoverNotifier.value =
+      prefs.getBool('show_nav_labels_on_hover') ?? true;
 
   if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
     await windowManager.ensureInitialized();
@@ -57,26 +70,31 @@ class TaskApp extends StatelessWidget {
     return ValueListenableBuilder<int>(
       valueListenable: themeIndexNotifier,
       builder: (context, themeIndex, child) {
-        final seedColor = appThemes[themeIndex % appThemes.length];
-        return MaterialApp(
-          title: 'Motchiy ToDo',
-          debugShowCheckedModeBanner: false,
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: seedColor,
-              brightness: Brightness.light,
-            ),
-            useMaterial3: true,
-          ),
-          darkTheme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: seedColor,
-              brightness: Brightness.dark,
-            ),
-            useMaterial3: true,
-          ),
-          themeMode: ThemeMode.system,
-          home: const MainScreen(),
+        return ValueListenableBuilder<ThemeMode>(
+          valueListenable: themeModeNotifier,
+          builder: (context, themeMode, child) {
+            final seedColor = appThemes[themeIndex % appThemes.length];
+            return MaterialApp(
+              title: 'Motchiy ToDo',
+              debugShowCheckedModeBanner: false,
+              theme: ThemeData(
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: seedColor,
+                  brightness: Brightness.light,
+                ),
+                useMaterial3: true,
+              ),
+              darkTheme: ThemeData(
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: seedColor,
+                  brightness: Brightness.dark,
+                ),
+                useMaterial3: true,
+              ),
+              themeMode: themeMode,
+              home: const MainScreen(),
+            );
+          },
         );
       },
     );
