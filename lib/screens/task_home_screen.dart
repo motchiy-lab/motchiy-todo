@@ -36,17 +36,12 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
     super.dispose();
   }
 
+  // 修正: リスナーや強制上書きをなくし、単純なコントローラーのキャッシュ管理に変更
   TextEditingController _getController(Task task) {
     if (!_controllers.containsKey(task.id)) {
-      final controller = TextEditingController(text: task.title);
-      controller.addListener(() {
-        if (task.title != controller.text) {
-          task.title = controller.text;
-          _saveTasks();
-        }
-      });
-      _controllers[task.id] = controller;
+      _controllers[task.id] = TextEditingController(text: task.title);
     } else {
+      // 外部からタスク名が変更されている場合のみテキストを同期する
       if (_controllers[task.id]!.text != task.title) {
         _controllers[task.id]!.text = task.title;
       }
@@ -155,6 +150,8 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
         offset: controller.text.length,
       );
     }
+    task.title = controller.text;
+    _saveTasks();
   }
 
   bool _isTaskActive(Task task) {
@@ -315,6 +312,11 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
                     controller: controller,
                     focusNode: focusNode,
                     maxLines: null,
+                    // 修正: onChanged を使って確実にタスクのタイトルを更新し保存する
+                    onChanged: (value) {
+                      task.title = value;
+                      _saveTasks();
+                    },
                     decoration: const InputDecoration(
                       border: InputBorder.none,
                       isDense: true,
