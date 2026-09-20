@@ -5,6 +5,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/task.dart';
 
+extension DateTimeExt on DateTime {
+  bool atSameDayAs(DateTime other) {
+    return year == other.year && month == other.month && day == other.day;
+  }
+}
+
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
 
@@ -317,7 +323,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  '💡 ヒント: カレンダー上でドラッグして期間を選択すると、タスクをまとめて作成できます',
+                                  '💡 ヒント: カレンダー上でドラッグして1日または複数日の予定を追加し、日付をクリックしてその日の予定一覧を表示できます',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: isDark
@@ -381,7 +387,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               ),
                               const Divider(height: 16),
 
-                              // Days Grid with GestureDetector for dragging
+                              // Days Grid with GestureDetector for dragging and single click selection
                               GestureDetector(
                                 key: _gridKey,
                                 onPanStart: (details) {
@@ -416,11 +422,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                       _dragEndDate != null) {
                                     final start = _dragStartDate!;
                                     final end = _dragEndDate!;
+
                                     setState(() {
                                       _isDragging = false;
                                       _dragStartDate = null;
                                       _dragEndDate = null;
                                     });
+
+                                    // ドラッグで1日（または複数日）の期間の予定を追加
                                     _createTaskForRange(start, end);
                                   } else {
                                     setState(() {
@@ -436,7 +445,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                   gridDelegate:
                                       const SliverGridDelegateWithFixedCrossAxisCount(
                                         crossAxisCount: 7,
-                                        childAspectRatio: 1.35,
+                                        childAspectRatio: 1.15,
                                       ),
                                   itemCount: gridDays.length,
                                   itemBuilder: (context, index) {
@@ -492,10 +501,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                     }
 
                                     final dayTasks = _getTasksForDate(date);
-                                    final hasTasks = dayTasks.isNotEmpty;
 
                                     return InkWell(
                                       onTap: () {
+                                        // クリックで日を選択し、その日の予定一覧を表示・切り替え
                                         setState(() {
                                           _selectedDate = date;
                                           if (!isCurrentMonth) {
@@ -547,16 +556,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                             8,
                                           ),
                                         ),
-                                        child: FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          child: Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              Text(
+                                        padding: const EdgeInsets.only(
+                                          top: 4,
+                                          left: 2,
+                                          right: 2,
+                                          bottom: 2,
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            Center(
+                                              child: Text(
                                                 '${date.day}',
                                                 style: TextStyle(
-                                                  fontSize: 14,
+                                                  fontSize: 13,
                                                   fontWeight:
                                                       isToday ||
                                                           isSelected ||
@@ -575,24 +589,90 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                                   : null)),
                                                 ),
                                               ),
-                                              const SizedBox(height: 2),
-                                              if (hasTasks) ...[
-                                                ...dayTasks.take(2).map((task) {
-                                                  final isRange =
-                                                      task.startDate != null &&
-                                                      task.dueDate != null &&
-                                                      task.startDate !=
-                                                          task.dueDate;
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Expanded(
+                                              child: ListView(
+                                                physics:
+                                                    const NeverScrollableScrollPhysics(),
+                                                padding: EdgeInsets.zero,
+                                                children: dayTasks.take(3).map((
+                                                  task,
+                                                ) {
+                                                  final start =
+                                                      task.startDate ??
+                                                      task.dueDate ??
+                                                      date;
+                                                  final end =
+                                                      task.dueDate ??
+                                                      task.startDate ??
+                                                      date;
+
+                                                  final dNorm = DateTime(
+                                                    date.year,
+                                                    date.month,
+                                                    date.day,
+                                                  );
+                                                  final sNorm = DateTime(
+                                                    start.year,
+                                                    start.month,
+                                                    start.day,
+                                                  );
+                                                  final eNorm = DateTime(
+                                                    end.year,
+                                                    end.month,
+                                                    end.day,
+                                                  );
+
+                                                  final bool isStart =
+                                                      dNorm.atSameDayAs(
+                                                        sNorm,
+                                                      ) ||
+                                                      date.weekday % 7 == 0 ||
+                                                      dNorm.atSameDayAs(
+                                                        _currentMonth,
+                                                      );
+                                                  final bool isEnd =
+                                                      dNorm.atSameDayAs(
+                                                        eNorm,
+                                                      ) ||
+                                                      date.weekday % 7 == 6;
+                                                  final bool isSingle = sNorm
+                                                      .atSameDayAs(eNorm);
+
+                                                  // Googleカレンダー風の角丸処理
+                                                  final borderRadius =
+                                                      BorderRadius.horizontal(
+                                                        left:
+                                                            (isStart ||
+                                                                isSingle)
+                                                            ? const Radius.circular(
+                                                                4,
+                                                              )
+                                                            : Radius.zero,
+                                                        right:
+                                                            (isEnd || isSingle)
+                                                            ? const Radius.circular(
+                                                                4,
+                                                              )
+                                                            : Radius.zero,
+                                                      );
+
                                                   return Container(
-                                                    margin:
-                                                        const EdgeInsets.symmetric(
-                                                          vertical: 1,
-                                                          horizontal: 2,
-                                                        ),
+                                                    height: 18,
+                                                    margin: EdgeInsets.only(
+                                                      bottom: 2,
+                                                      left:
+                                                          (isStart || isSingle)
+                                                          ? 0
+                                                          : 0,
+                                                      right: (isEnd || isSingle)
+                                                          ? 0
+                                                          : 0,
+                                                    ),
                                                     padding:
                                                         const EdgeInsets.symmetric(
                                                           horizontal: 4,
-                                                          vertical: 1,
                                                         ),
                                                     decoration: BoxDecoration(
                                                       color: task.isCompleted
@@ -602,65 +682,36 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                                 )
                                                           : colorScheme.primary
                                                                 .withValues(
-                                                                  alpha: isRange
-                                                                      ? 0.25
-                                                                      : 0.8,
+                                                                  alpha: 0.85,
                                                                 ),
                                                       borderRadius:
-                                                          BorderRadius.circular(
-                                                            4,
-                                                          ),
-                                                      border: isRange
-                                                          ? Border.all(
-                                                              color: colorScheme
-                                                                  .primary
-                                                                  .withValues(
-                                                                    alpha: 0.5,
-                                                                  ),
-                                                              width: 0.5,
-                                                            )
-                                                          : null,
+                                                          borderRadius,
                                                     ),
+                                                    alignment:
+                                                        Alignment.centerLeft,
                                                     child: Text(
                                                       task.title.isEmpty
                                                           ? '無題'
                                                           : task.title,
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
                                                       style: TextStyle(
-                                                        fontSize: 9,
-                                                        color: task.isCompleted
-                                                            ? Colors.grey
-                                                            : (isRange
-                                                                  ? colorScheme
-                                                                        .primary
-                                                                  : colorScheme
-                                                                        .onPrimary),
+                                                        fontSize: 10,
+                                                        color: colorScheme
+                                                            .onPrimary,
                                                         decoration:
                                                             task.isCompleted
                                                             ? TextDecoration
                                                                   .lineThrough
                                                             : null,
                                                       ),
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
                                                     ),
                                                   );
-                                                }),
-                                                if (dayTasks.length > 2)
-                                                  Text(
-                                                    '+${dayTasks.length - 2}',
-                                                    style: TextStyle(
-                                                      fontSize: 8,
-                                                      color:
-                                                          colorScheme.primary,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                                  ),
-                                              ] else
-                                                const SizedBox(height: 6),
-                                            ],
-                                          ),
+                                                }).toList(),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     );
