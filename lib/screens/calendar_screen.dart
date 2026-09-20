@@ -128,39 +128,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return gridDays;
   }
 
-  bool _isTaskInRange(Task task, DateTime date) {
-    if (task.startDate == null || task.dueDate == null) return false;
-    // 開始日とdueDateが同じ場合は期間帯としては扱わない（期限日のみ）
-    if (task.startDate!.atSameDayAs(task.dueDate!)) return false;
+  bool _isTaskOnDate(Task task, DateTime date) {
+    final start = task.startDate ?? task.dueDate;
+    final end = task.dueDate ?? task.startDate;
+    if (start == null || end == null) return false;
 
     final d = DateTime(date.year, date.month, date.day);
-    final s = DateTime(
-      task.startDate!.year,
-      task.startDate!.month,
-      task.startDate!.day,
-    );
-    final e = DateTime(
-      task.dueDate!.year,
-      task.dueDate!.month,
-      task.dueDate!.day,
-    );
+    final s = DateTime(start.year, start.month, start.day);
+    final e = DateTime(end.year, end.month, end.day);
 
     return !d.isBefore(s) && !d.isAfter(e);
-  }
-
-  bool _isTaskDueDate(Task task, DateTime date) {
-    if (task.dueDate == null) return false;
-    final d = DateTime(date.year, date.month, date.day);
-    final due = DateTime(
-      task.dueDate!.year,
-      task.dueDate!.month,
-      task.dueDate!.day,
-    );
-    return d.atSameDayAs(due);
-  }
-
-  bool _isTaskOnDate(Task task, DateTime date) {
-    return _isTaskInRange(task, date) || _isTaskDueDate(task, date);
   }
 
   List<Task> _getTasksForDate(DateTime date) {
@@ -564,9 +541,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                 : (isSelected
                                                       ? colorScheme.primary
                                                             .withValues(
-                                                              alpha: 0.22,
+                                                              alpha: 0.15,
                                                             )
-                                                      : Colors.transparent),
+                                                      : (isToday
+                                                            ? colorScheme
+                                                                  .secondaryContainer
+                                                                  .withValues(
+                                                                    alpha: 0.4,
+                                                                  )
+                                                            : Colors
+                                                                  .transparent)),
                                             border: Border(
                                               right: BorderSide(
                                                 color: (index % 7 != 6)
@@ -586,64 +570,40 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                           ),
                                           padding: const EdgeInsets.only(
                                             top: 2,
+                                            left: 4,
+                                            right: 4,
                                             bottom: 2,
                                           ),
                                           child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.stretch,
                                             children: [
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 4,
-                                                    ),
-                                                child: Align(
-                                                  alignment: Alignment.topRight,
-                                                  child: Container(
-                                                    padding: isToday
-                                                        ? const EdgeInsets.symmetric(
-                                                            horizontal: 5,
-                                                            vertical: 1,
-                                                          )
-                                                        : EdgeInsets.zero,
-                                                    decoration: isToday
-                                                        ? BoxDecoration(
-                                                            color: colorScheme
-                                                                .primary,
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  10,
-                                                                ),
-                                                          )
-                                                        : null,
-                                                    child: Text(
-                                                      '${date.day}',
-                                                      style: TextStyle(
-                                                        fontSize: 11,
-                                                        fontWeight:
-                                                            isToday ||
-                                                                isSelected ||
-                                                                isInDragRange
-                                                            ? FontWeight.bold
-                                                            : FontWeight.normal,
-                                                        color: isToday
-                                                            ? colorScheme
-                                                                  .onPrimary
-                                                            : (!isCurrentMonth
-                                                                  ? (isDark
-                                                                        ? Colors
-                                                                              .grey[700]
-                                                                        : Colors
-                                                                              .grey[400])
-                                                                  : (date.weekday ==
-                                                                            7
-                                                                        ? Colors
-                                                                              .red[400]
-                                                                        : (date.weekday == 6
-                                                                              ? Colors.blue[400]
-                                                                              : (isDark ? Colors.grey[300] : Colors.grey[750])))),
-                                                      ),
-                                                    ),
+                                              Align(
+                                                alignment: Alignment.topRight,
+                                                child: Text(
+                                                  '${date.day}',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight:
+                                                        isToday ||
+                                                            isSelected ||
+                                                            isInDragRange
+                                                        ? FontWeight.bold
+                                                        : FontWeight.normal,
+                                                    color: !isCurrentMonth
+                                                        ? (isDark
+                                                              ? Colors.grey[700]
+                                                              : Colors
+                                                                    .grey[400])
+                                                        : (date.weekday == 7
+                                                              ? Colors.red[400]
+                                                              : (date.weekday ==
+                                                                        6
+                                                                    ? Colors
+                                                                          .blue[400]
+                                                                    : (isDark
+                                                                          ? Colors.grey[300]
+                                                                          : Colors.grey[750]))),
                                                   ),
                                                 ),
                                               ),
@@ -685,15 +645,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                         .atSameDayAs(sNorm);
                                                     final bool isEnd = dNorm
                                                         .atSameDayAs(eNorm);
-                                                    final bool isDueDate =
-                                                        task.dueDate != null &&
-                                                        dNorm.atSameDayAs(
-                                                          DateTime(
-                                                            task.dueDate!.year,
-                                                            task.dueDate!.month,
-                                                            task.dueDate!.day,
-                                                          ),
-                                                        );
 
                                                     // 日付をまたぐ帯の連続性: 各日の各行でのスロット（タスクの並び順）を固定するための処理
                                                     // 曜日ごとのマージンや隙間をなくし、隣のセルと完全に結合させる
@@ -727,164 +678,67 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                               : Radius.zero,
                                                         );
 
-                                                    // セル同士の隙間や区切り線をなくし、帯を滑らかに繋げるための調整
-                                                    final bool hasLeftCont =
-                                                        !(isWeekStart ||
-                                                            isStart);
-                                                    final bool hasRightCont =
-                                                        !(isWeekEnd || isEnd);
+                                                    // セル同士の隙間をなくすため、左右のパディングやマージンを結合用に調整
+                                                    final double leftMargin =
+                                                        isWeekStart || isStart
+                                                        ? 0
+                                                        : -4;
+                                                    final double rightMargin =
+                                                        isWeekEnd || isEnd
+                                                        ? 0
+                                                        : -4;
 
-                                                    final double leftOffset =
-                                                        hasLeftCont
-                                                        ? -4.0
-                                                        : 4.0;
-                                                    final double rightExtra =
-                                                        hasRightCont
-                                                        ? 4.0
-                                                        : 0.0;
-
-                                                    if (isDueDate) {
-                                                      return Container(
-                                                        height: 18,
-                                                        margin:
-                                                            const EdgeInsets.only(
-                                                              bottom: 2,
-                                                            ),
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 2,
-                                                            ),
-                                                        decoration: BoxDecoration(
-                                                          color: isDark
-                                                              ? Colors.grey[800]
-                                                              : Colors
-                                                                    .grey[200],
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                4,
-                                                              ),
-                                                          border: Border.all(
-                                                            color: colorScheme
-                                                                .primary
-                                                                .withValues(
-                                                                  alpha: 0.5,
-                                                                ),
-                                                            width: 1,
-                                                          ),
-                                                        ),
-                                                        alignment: Alignment
-                                                            .centerLeft,
-                                                        child: Row(
-                                                          mainAxisSize:
-                                                              MainAxisSize.min,
-                                                          children: [
-                                                            const Text(
-                                                              '🎯',
-                                                              style: TextStyle(
-                                                                fontSize: 10,
-                                                              ),
-                                                            ),
-                                                            const SizedBox(
-                                                              width: 2,
-                                                            ),
-                                                            Expanded(
-                                                              child: Text(
-                                                                task
-                                                                        .title
-                                                                        .isEmpty
-                                                                    ? '無題'
-                                                                    : task.title,
-                                                                style: TextStyle(
-                                                                  fontSize: 9,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  color: isDark
-                                                                      ? Colors
-                                                                            .white70
-                                                                      : Colors
-                                                                            .black87,
-                                                                  decoration:
-                                                                      task.isCompleted
-                                                                      ? TextDecoration
-                                                                            .lineThrough
-                                                                      : null,
-                                                                ),
-                                                                maxLines: 1,
-                                                                overflow:
-                                                                    TextOverflow
-                                                                        .ellipsis,
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      );
-                                                    }
-
-                                                    return Transform.translate(
-                                                      offset: Offset(
-                                                        leftOffset,
-                                                        0,
+                                                    return Container(
+                                                      height: 18,
+                                                      margin: EdgeInsets.only(
+                                                        bottom: 2,
+                                                        left: leftMargin,
+                                                        right: rightMargin,
                                                       ),
-                                                      child: Container(
-                                                        height: 18,
-                                                        margin:
-                                                            const EdgeInsets.only(
-                                                              bottom: 2,
-                                                            ),
-                                                        padding: EdgeInsets.only(
-                                                          left:
-                                                              (isWeekStart ||
-                                                                  isStart)
-                                                              ? 4
-                                                              : 0,
-                                                          right:
-                                                              ((isWeekEnd ||
-                                                                      isEnd)
-                                                                  ? 4
-                                                                  : 0) +
-                                                              rightExtra,
-                                                        ),
-                                                        // 右側のはみ出しを適用
-                                                        constraints:
-                                                            BoxConstraints(
-                                                              minWidth: 0,
-                                                            ),
-                                                        decoration: BoxDecoration(
-                                                          color:
+                                                      padding: EdgeInsets.only(
+                                                        left:
+                                                            (isWeekStart ||
+                                                                isStart)
+                                                            ? 4
+                                                            : 2,
+                                                        right:
+                                                            (isWeekEnd || isEnd)
+                                                            ? 4
+                                                            : 2,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: task.isCompleted
+                                                            ? Colors.grey
+                                                                  .withValues(
+                                                                    alpha: 0.3,
+                                                                  )
+                                                            : colorScheme
+                                                                  .primary
+                                                                  .withValues(
+                                                                    alpha: 0.85,
+                                                                  ),
+                                                        borderRadius:
+                                                            borderRadius,
+                                                      ),
+                                                      alignment:
+                                                          Alignment.centerLeft,
+                                                      child: Text(
+                                                        task.title.isEmpty
+                                                            ? '無題'
+                                                            : task.title,
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          color: colorScheme
+                                                              .onPrimary,
+                                                          decoration:
                                                               task.isCompleted
-                                                              ? Colors.grey
-                                                                    .withValues(
-                                                                      alpha:
-                                                                          0.3,
-                                                                    )
-                                                              : colorScheme
-                                                                    .primary
-                                                                    .withValues(
-                                                                      alpha:
-                                                                          0.85,
-                                                                    ),
-                                                          borderRadius:
-                                                              borderRadius,
+                                                              ? TextDecoration
+                                                                    .lineThrough
+                                                              : null,
                                                         ),
-                                                        alignment: Alignment
-                                                            .centerLeft,
-                                                        child: Text(
-                                                          '${isDueDate ? '🎯 ' : ''}${task.title.isEmpty ? '無題' : task.title}',
-                                                          style: TextStyle(
-                                                            fontSize: 10,
-                                                            color: colorScheme
-                                                                .onPrimary,
-                                                            decoration:
-                                                                task.isCompleted
-                                                                ? TextDecoration
-                                                                      .lineThrough
-                                                                : null,
-                                                          ),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
                                                       ),
                                                     );
                                                   }).toList(),

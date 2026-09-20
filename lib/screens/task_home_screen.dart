@@ -59,14 +59,6 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
       final node = FocusNode();
       node.addListener(() {
         if (!node.hasFocus) {
-          final controller = _controllers[task.id];
-          if (controller != null && controller.text != task.title) {
-            setState(() {
-              task.title = controller.text;
-            });
-            _saveTasks();
-          }
-
           if (task.title.trim().isEmpty && _tasks.length > 1) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted &&
@@ -323,10 +315,6 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
                     controller: controller,
                     focusNode: focusNode,
                     maxLines: null,
-                    onChanged: (value) {
-                      task.title = value;
-                      _saveTasks();
-                    },
                     decoration: const InputDecoration(
                       border: InputBorder.none,
                       isDense: true,
@@ -436,60 +424,50 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
         .toList();
     final completedTasks = _getCompletedTasks();
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        FocusScope.of(context).unfocus();
-      },
-      child: SafeArea(
-        top: true,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 700),
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ...uncompletedTasks.map(
-                            (task) => _buildTaskRow(task),
-                          ),
-                          if (completedTasks.isNotEmpty) ...[
-                            const Padding(
-                              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                              child: Text(
-                                '完了済み',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey,
-                                ),
+    return SafeArea(
+      top: false,
+      child: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 700),
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ...uncompletedTasks.map((task) => _buildTaskRow(task)),
+                        if (completedTasks.isNotEmpty) ...[
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                            child: Text(
+                              '完了済み',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey,
                               ),
                             ),
-                            ...completedTasks.map(
-                              (task) => _buildTaskRow(task),
-                            ),
-                          ],
-                          SizedBox(
-                            height: 200,
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onDoubleTap: _addTaskAtEnd,
-                              child: const SizedBox.expand(),
-                            ),
                           ),
+                          ...completedTasks.map((task) => _buildTaskRow(task)),
                         ],
-                      ),
+                        SizedBox(
+                          height: 200,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onDoubleTap: _addTaskAtEnd,
+                            child: const SizedBox.expand(),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
-      ),
+            ),
     );
   }
 }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 
-import '../main.dart';
 import 'calendar_screen.dart';
 import 'idea_screen.dart';
 import 'settings_screen.dart';
@@ -41,7 +41,14 @@ class _MainScreenState extends State<MainScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: _screens),
+      body: Column(
+        children: [
+          const _CustomTitleBar(),
+          Expanded(
+            child: IndexedStack(index: _currentIndex, children: _screens),
+          ),
+        ],
+      ),
       bottomNavigationBar: SizedBox(
         height: 75,
         child: Stack(
@@ -132,6 +139,116 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
+class _CustomTitleBar extends StatelessWidget {
+  const _CustomTitleBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      height: 32,
+      color: isDark ? Colors.grey[900] : Colors.grey[100],
+      child: Row(
+        children: [
+          Expanded(
+            child: DragToMoveArea(
+              child: Container(
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  'Motchiy ToDo',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          _WindowButton(
+            icon: Icons.remove,
+            onPressed: () => windowManager.minimize(),
+          ),
+          _WindowButton(
+            icon: Icons.square_outlined,
+            onPressed: () async {
+              if (await windowManager.isMaximized()) {
+                windowManager.unmaximize();
+              } else {
+                windowManager.maximize();
+              }
+            },
+          ),
+          _WindowButton(
+            icon: Icons.close,
+            isClose: true,
+            onPressed: () => windowManager.close(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WindowButton extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool isClose;
+
+  const _WindowButton({
+    required this.icon,
+    required this.onPressed,
+    this.isClose = false,
+  });
+
+  @override
+  State<_WindowButton> createState() => _WindowButtonState();
+}
+
+class _WindowButtonState extends State<_WindowButton> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return MouseRegion(
+      onEnter: (_) {
+        Future.microtask(() {
+          if (mounted) setState(() => _isHovered = true);
+        });
+      },
+      onExit: (_) {
+        Future.microtask(() {
+          if (mounted) setState(() => _isHovered = false);
+        });
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onPressed,
+        child: Container(
+          width: 40,
+          height: 32,
+          color: _isHovered
+              ? (widget.isClose
+                    ? Colors.red
+                    : (isDark ? Colors.white10 : Colors.black12))
+              : Colors.transparent,
+          child: Icon(
+            widget.icon,
+            size: 14,
+            color: _isHovered && widget.isClose
+                ? Colors.white
+                : (isDark ? Colors.grey[300] : Colors.grey[700]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _NavItem extends StatefulWidget {
   final int index;
   final IconData outlineIcon;
@@ -194,26 +311,18 @@ class _NavItemState extends State<_NavItem> {
                   ),
                 ),
               ),
-              if (showNavLabelsOnHoverNotifier.value && _isHovered)
+              if (_isHovered)
                 Positioned(
                   bottom: 10, // 文字をアイコンに近づける
-                  child: ValueListenableBuilder<bool>(
-                    valueListenable: showNavLabelsOnHoverNotifier,
-                    builder: (context, showLabel, child) {
-                      if (!showLabel || !_isHovered) {
-                        return const SizedBox.shrink();
-                      }
-                      return Text(
-                        widget.label,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          color: color,
-                        ),
-                      );
-                    },
+                  child: Text(
+                    widget.label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                      color: color,
+                    ),
                   ),
                 ),
             ],
@@ -298,27 +407,22 @@ class _CenterNavItemState extends State<_CenterNavItem> {
                   ),
                 ),
               ),
-              ValueListenableBuilder<bool>(
-                valueListenable: showNavLabelsOnHoverNotifier,
-                builder: (context, showLabel, child) {
-                  if (!showLabel || !_isHovered) return const SizedBox.shrink();
-                  return Positioned(
-                    bottom: 0, // 中央ボタンの文字をアイコンに近づける
-                    child: Text(
-                      widget.label,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: isSelected
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                        color: isSelected
-                            ? colorScheme.primary
-                            : Colors.grey[700],
-                      ),
+              if (_isHovered)
+                Positioned(
+                  bottom: 0, // 中央ボタンの文字をアイコンに近づける
+                  child: Text(
+                    widget.label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                      color: isSelected
+                          ? colorScheme.primary
+                          : Colors.grey[700],
                     ),
-                  );
-                },
-              ),
+                  ),
+                ),
             ],
           ),
         ),
