@@ -118,7 +118,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       gridDays.add({'date': date, 'isCurrentMonth': true});
     }
 
-    final totalCells = gridDays.length <= 35 ? 35 : 42;
+    final totalCells = 42; // 常に6週間（42セル）固定にして高さを一定にする
     final remainingDays = totalCells - gridDays.length;
     for (int i = 1; i <= remainingDays; i++) {
       final date = DateTime(_currentMonth.year, _currentMonth.month + 1, i);
@@ -645,24 +645,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                         .atSameDayAs(sNorm);
                                                     final bool isEnd = dNorm
                                                         .atSameDayAs(eNorm);
-                                                    final bool isSingle = sNorm
-                                                        .atSameDayAs(eNorm);
 
-                                                    // 日付をまたぐ帯の連続性を修正（週の初日や月のはじめ、または開始/終了判定）
+                                                    // 日付をまたぐ帯の連続性: 各日の各行でのスロット（タスクの並び順）を固定するための処理
+                                                    // 曜日ごとのマージンや隙間をなくし、隣のセルと完全に結合させる
                                                     final bool isWeekStart =
-                                                        date.weekday % 7 == 0;
+                                                        date.weekday % 7 ==
+                                                        0; // 日曜日
                                                     final bool isWeekEnd =
-                                                        date.weekday % 7 == 6;
+                                                        date.weekday % 7 ==
+                                                        6; // 土曜日
 
+                                                    // タスクの開始日または日曜日の場合に左側を丸める
                                                     final bool shouldRoundLeft =
-                                                        isStart ||
-                                                        isSingle ||
-                                                        isWeekStart;
+                                                        isStart || isWeekStart;
+                                                    // タスクの終了日または土曜日の場合に右側を丸める
                                                     final bool
                                                     shouldRoundRight =
-                                                        isEnd ||
-                                                        isSingle ||
-                                                        isWeekEnd;
+                                                        isEnd || isWeekEnd;
 
                                                     final borderRadius =
                                                         BorderRadius.horizontal(
@@ -679,49 +678,72 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                               : Radius.zero,
                                                         );
 
-                                                    return Container(
-                                                      height: 18,
-                                                      margin:
-                                                          const EdgeInsets.only(
-                                                            bottom: 2,
-                                                          ),
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            horizontal: 4,
-                                                          ),
-                                                      decoration: BoxDecoration(
-                                                        color: task.isCompleted
-                                                            ? Colors.grey
-                                                                  .withValues(
-                                                                    alpha: 0.3,
-                                                                  )
-                                                            : colorScheme
-                                                                  .primary
-                                                                  .withValues(
-                                                                    alpha: 0.85,
-                                                                  ),
-                                                        borderRadius:
-                                                            borderRadius,
+                                                    // セル同士の隙間をなくすため、左右の隙間をパディングやオフセットで調整
+                                                    final double leftOffset =
+                                                        isWeekStart || isStart
+                                                        ? 0
+                                                        : -4;
+
+                                                    return Transform.translate(
+                                                      offset: Offset(
+                                                        leftOffset,
+                                                        0,
                                                       ),
-                                                      alignment:
-                                                          Alignment.centerLeft,
-                                                      child: Text(
-                                                        task.title.isEmpty
-                                                            ? '無題'
-                                                            : task.title,
-                                                        style: TextStyle(
-                                                          fontSize: 10,
-                                                          color: colorScheme
-                                                              .onPrimary,
-                                                          decoration:
-                                                              task.isCompleted
-                                                              ? TextDecoration
-                                                                    .lineThrough
-                                                              : null,
+                                                      child: Container(
+                                                        height: 18,
+                                                        margin:
+                                                            const EdgeInsets.only(
+                                                              bottom: 2,
+                                                            ),
+                                                        padding: EdgeInsets.only(
+                                                          left:
+                                                              (isWeekStart ||
+                                                                  isStart)
+                                                              ? 4
+                                                              : 2,
+                                                          right:
+                                                              (isWeekEnd ||
+                                                                  isEnd)
+                                                              ? 4
+                                                              : 2,
                                                         ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
+                                                        decoration: BoxDecoration(
+                                                          color:
+                                                              task.isCompleted
+                                                              ? Colors.grey
+                                                                    .withValues(
+                                                                      alpha:
+                                                                          0.3,
+                                                                    )
+                                                              : colorScheme
+                                                                    .primary
+                                                                    .withValues(
+                                                                      alpha:
+                                                                          0.85,
+                                                                    ),
+                                                          borderRadius:
+                                                              borderRadius,
+                                                        ),
+                                                        alignment: Alignment
+                                                            .centerLeft,
+                                                        child: Text(
+                                                          task.title.isEmpty
+                                                              ? '無題'
+                                                              : task.title,
+                                                          style: TextStyle(
+                                                            fontSize: 10,
+                                                            color: colorScheme
+                                                                .onPrimary,
+                                                            decoration:
+                                                                task.isCompleted
+                                                                ? TextDecoration
+                                                                      .lineThrough
+                                                                : null,
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                        ),
                                                       ),
                                                     );
                                                   }).toList(),
