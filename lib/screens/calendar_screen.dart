@@ -128,16 +128,39 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return gridDays;
   }
 
-  bool _isTaskOnDate(Task task, DateTime date) {
-    final start = task.startDate ?? task.dueDate;
-    final end = task.dueDate ?? task.startDate;
-    if (start == null || end == null) return false;
+  bool _isTaskInRange(Task task, DateTime date) {
+    if (task.startDate == null || task.dueDate == null) return false;
+    // 開始日とdueDateが同じ場合は期間帯としては扱わない（期限日のみ）
+    if (task.startDate!.atSameDayAs(task.dueDate!)) return false;
 
     final d = DateTime(date.year, date.month, date.day);
-    final s = DateTime(start.year, start.month, start.day);
-    final e = DateTime(end.year, end.month, end.day);
+    final s = DateTime(
+      task.startDate!.year,
+      task.startDate!.month,
+      task.startDate!.day,
+    );
+    final e = DateTime(
+      task.dueDate!.year,
+      task.dueDate!.month,
+      task.dueDate!.day,
+    );
 
     return !d.isBefore(s) && !d.isAfter(e);
+  }
+
+  bool _isTaskDueDate(Task task, DateTime date) {
+    if (task.dueDate == null) return false;
+    final d = DateTime(date.year, date.month, date.day);
+    final due = DateTime(
+      task.dueDate!.year,
+      task.dueDate!.month,
+      task.dueDate!.day,
+    );
+    return d.atSameDayAs(due);
+  }
+
+  bool _isTaskOnDate(Task task, DateTime date) {
+    return _isTaskInRange(task, date) || _isTaskDueDate(task, date);
   }
 
   List<Task> _getTasksForDate(DateTime date) {
@@ -708,6 +731,84 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                         hasRightCont
                                                         ? 4.0
                                                         : 0.0;
+
+                                                    if (isDueDate) {
+                                                      return Container(
+                                                        height: 18,
+                                                        margin:
+                                                            const EdgeInsets.only(
+                                                              bottom: 2,
+                                                            ),
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 2,
+                                                            ),
+                                                        decoration: BoxDecoration(
+                                                          color: isDark
+                                                              ? Colors.grey[800]
+                                                              : Colors
+                                                                    .grey[200],
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                4,
+                                                              ),
+                                                          border: Border.all(
+                                                            color: colorScheme
+                                                                .primary
+                                                                .withValues(
+                                                                  alpha: 0.5,
+                                                                ),
+                                                            width: 1,
+                                                          ),
+                                                        ),
+                                                        alignment: Alignment
+                                                            .centerLeft,
+                                                        child: Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            const Text(
+                                                              '🎯',
+                                                              style: TextStyle(
+                                                                fontSize: 10,
+                                                              ),
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 2,
+                                                            ),
+                                                            Expanded(
+                                                              child: Text(
+                                                                task
+                                                                        .title
+                                                                        .isEmpty
+                                                                    ? '無題'
+                                                                    : task.title,
+                                                                style: TextStyle(
+                                                                  fontSize: 9,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                  color: isDark
+                                                                      ? Colors
+                                                                            .white70
+                                                                      : Colors
+                                                                            .black87,
+                                                                  decoration:
+                                                                      task.isCompleted
+                                                                      ? TextDecoration
+                                                                            .lineThrough
+                                                                      : null,
+                                                                ),
+                                                                maxLines: 1,
+                                                                overflow:
+                                                                    TextOverflow
+                                                                        .ellipsis,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      );
+                                                    }
 
                                                     return Transform.translate(
                                                       offset: Offset(
