@@ -59,6 +59,14 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
       final node = FocusNode();
       node.addListener(() {
         if (!node.hasFocus) {
+          final controller = _controllers[task.id];
+          if (controller != null && controller.text != task.title) {
+            setState(() {
+              task.title = controller.text;
+            });
+            _saveTasks();
+          }
+
           if (task.title.trim().isEmpty && _tasks.length > 1) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted &&
@@ -315,6 +323,10 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
                     controller: controller,
                     focusNode: focusNode,
                     maxLines: null,
+                    onChanged: (value) {
+                      task.title = value;
+                      _saveTasks();
+                    },
                     decoration: const InputDecoration(
                       border: InputBorder.none,
                       isDense: true,
