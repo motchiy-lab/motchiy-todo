@@ -7,7 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/task.dart';
 
 class TaskHomeScreen extends StatefulWidget {
-  const TaskHomeScreen({super.key});
+  final VoidCallback? onBack;
+  const TaskHomeScreen({super.key, this.onBack});
 
   @override
   State<TaskHomeScreen> createState() => TaskHomeScreenState();
@@ -426,61 +427,80 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
         .toList();
     final completedTasks = _getCompletedTasks();
 
-    return GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-      },
-      child: SafeArea(
-        top: true,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 700),
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ...uncompletedTasks.map(
-                            (task) => _buildTaskRow(task),
-                          ),
-                          if (completedTasks.isNotEmpty) ...[
-                            const Padding(
-                              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                              child: Text(
-                                '完了済み',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ),
-                            ...completedTasks.map(
+    return Scaffold(
+      appBar: AppBar(
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: CircleAvatar(
+            backgroundColor: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new, size: 16),
+              color: Theme.of(context).colorScheme.onSurface,
+              onPressed: widget.onBack,
+            ),
+          ),
+        ),
+        title: const Text('ToDoリスト'),
+        elevation: 0,
+      ),
+      body: GestureDetector(
+        onTap: () {
+          FocusScope.of(context).unfocus();
+        },
+        child: SafeArea(
+          top: true,
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 700),
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ...uncompletedTasks.map(
                               (task) => _buildTaskRow(task),
                             ),
-                          ],
-                          SizedBox(
-                            height: 200,
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () {
-                                FocusScope.of(context).unfocus();
-                              },
-                              onDoubleTap: _addTaskAtEnd,
-                              child: const SizedBox.expand(),
+                            if (completedTasks.isNotEmpty) ...[
+                              const Padding(
+                                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                                child: Text(
+                                  '完了済み',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                              ...completedTasks.map(
+                                (task) => _buildTaskRow(task),
+                              ),
+                            ],
+                            SizedBox(
+                              height: 200,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () {
+                                  FocusScope.of(context).unfocus();
+                                },
+                                onDoubleTap: _addTaskAtEnd,
+                                child: const SizedBox.expand(),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+        ),
       ),
     );
   }

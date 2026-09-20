@@ -25,7 +25,7 @@ class _MainScreenState extends State<MainScreen> {
   late final List<Widget> _screens = [
     const CalendarScreen(),
     const WishlistScreen(),
-    TaskHomeScreen(key: _taskHomeScreenKey),
+    TaskHomeScreen(key: _taskHomeScreenKey, onBack: () => _onTabTapped(0)),
     const IdeaScreen(),
     const SettingsScreen(),
   ];
@@ -55,92 +55,94 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: SizedBox(
-        height: 75,
-        child: Stack(
-          alignment: Alignment.bottomCenter,
-          clipBehavior: Clip.none,
-          children: [
-            Positioned(
-              bottom: -20,
-              left: 16,
-              right: 16,
+      bottomNavigationBar: _currentIndex == 2
+          ? null
+          : SizedBox(
               height: 75,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? colorScheme.surfaceContainerHighest
-                      : Colors.white,
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, -4),
+              child: Stack(
+                alignment: Alignment.bottomCenter,
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    bottom: -20,
+                    left: 16,
+                    right: 16,
+                    height: 75,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? colorScheme.surfaceContainerHighest
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(28),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, -4),
+                          ),
+                        ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // 左側の2つのアイテム
+                            NavItem(
+                              index: 0,
+                              outlineIcon: Icons.calendar_month_outlined,
+                              filledIcon: Icons.calendar_month,
+                              label: 'カレンダー',
+                              currentIndex: _currentIndex,
+                              onTap: _onTabTapped,
+                            ),
+                            const SizedBox(width: 12),
+                            NavItem(
+                              index: 1,
+                              outlineIcon: Icons.card_giftcard_outlined,
+                              filledIcon: Icons.card_giftcard,
+                              label: '欲しいもの',
+                              currentIndex: _currentIndex,
+                              onTap: _onTabTapped,
+                            ),
+                            // 中央のボタンのためのスペース（空白をあける）
+                            const SizedBox(width: 70),
+                            // 右側の2つのアイテム
+                            NavItem(
+                              index: 3,
+                              outlineIcon: Icons.lightbulb_outline,
+                              filledIcon: Icons.lightbulb,
+                              label: 'アイデア',
+                              currentIndex: _currentIndex,
+                              onTap: _onTabTapped,
+                            ),
+                            const SizedBox(width: 12),
+                            NavItem(
+                              index: 4,
+                              outlineIcon: Icons.settings_outlined,
+                              filledIcon: Icons.settings,
+                              label: '設定',
+                              currentIndex: _currentIndex,
+                              onTap: _onTabTapped,
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // 左側の2つのアイテム
-                      NavItem(
-                        index: 0,
-                        outlineIcon: Icons.calendar_month_outlined,
-                        filledIcon: Icons.calendar_month,
-                        label: 'カレンダー',
-                        currentIndex: _currentIndex,
-                        onTap: _onTabTapped,
-                      ),
-                      const SizedBox(width: 12),
-                      NavItem(
-                        index: 1,
-                        outlineIcon: Icons.card_giftcard_outlined,
-                        filledIcon: Icons.card_giftcard,
-                        label: '欲しいもの',
-                        currentIndex: _currentIndex,
-                        onTap: _onTabTapped,
-                      ),
-                      // 中央のボタンのためのスペース（空白をあける）
-                      const SizedBox(width: 70),
-                      // 右側の2つのアイテム
-                      NavItem(
-                        index: 3,
-                        outlineIcon: Icons.lightbulb_outline,
-                        filledIcon: Icons.lightbulb,
-                        label: 'アイデア',
-                        currentIndex: _currentIndex,
-                        onTap: _onTabTapped,
-                      ),
-                      const SizedBox(width: 12),
-                      NavItem(
-                        index: 4,
-                        outlineIcon: Icons.settings_outlined,
-                        filledIcon: Icons.settings,
-                        label: '設定',
-                        currentIndex: _currentIndex,
-                        onTap: _onTabTapped,
-                      ),
-                    ],
                   ),
-                ),
+                  Positioned(
+                    bottom: 0,
+                    child: CenterNavItem(
+                      index: 2,
+                      filledIcon: Icons.checklist,
+                      label: 'ToDoリスト',
+                      currentIndex: _currentIndex,
+                      onTap: _onTabTapped,
+                    ),
+                  ),
+                ],
               ),
             ),
-            Positioned(
-              bottom: 0,
-              child: CenterNavItem(
-                index: 2,
-                filledIcon: Icons.checklist,
-                label: 'ToDoリスト',
-                currentIndex: _currentIndex,
-                onTap: _onTabTapped,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

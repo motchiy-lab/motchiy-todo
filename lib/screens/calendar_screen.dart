@@ -680,13 +680,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
                                                     // セル同士の隙間をなくすため、左右のパディングやマージンを結合用に調整
                                                     final double leftMargin =
-                                                        isWeekStart || isStart
-                                                        ? 0
-                                                        : -4;
+                                                        (isWeekStart || isStart)
+                                                        ? 0.0
+                                                        : 0.0; // 負のマージンを削除して非負にする
                                                     final double rightMargin =
-                                                        isWeekEnd || isEnd
-                                                        ? 0
-                                                        : -4;
+                                                        (isWeekEnd || isEnd)
+                                                        ? 0.0
+                                                        : 0.0;
 
                                                     return Container(
                                                       height: 18,
