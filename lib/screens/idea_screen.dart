@@ -8,7 +8,7 @@ class IdeaScreen extends StatelessWidget {
     return const Scaffold(
       body: Center(
         child: Text(
-          'アイデア',
+          'この機能は開発中です',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
       ),
