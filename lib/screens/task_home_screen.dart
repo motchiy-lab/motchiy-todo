@@ -431,7 +431,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
         FocusScope.of(context).unfocus();
       },
       child: SafeArea(
-        top: false,
+        top: true,
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : Align(

@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import 'calendar_screen.dart';
@@ -44,7 +47,9 @@ class _MainScreenState extends State<MainScreen> {
     return Scaffold(
       body: Column(
         children: [
-          const CustomTitleBar(),
+          if (!kIsWeb &&
+              (Platform.isWindows || Platform.isMacOS || Platform.isLinux))
+            const CustomTitleBar(),
           Expanded(
             child: IndexedStack(index: _currentIndex, children: _screens),
           ),
