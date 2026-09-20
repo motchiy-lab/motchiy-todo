@@ -651,6 +651,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                         .atSameDayAs(sNorm);
                                                     final bool isEnd = dNorm
                                                         .atSameDayAs(eNorm);
+                                                    final bool isDueDate =
+                                                        task.dueDate != null &&
+                                                        dNorm.atSameDayAs(
+                                                          DateTime(
+                                                            task.dueDate!.year,
+                                                            task.dueDate!.month,
+                                                            task.dueDate!.day,
+                                                          ),
+                                                        );
 
                                                     // 日付をまたぐ帯の連続性: 各日の各行でのスロット（タスクの並び順）を固定するための処理
                                                     // 曜日ごとのマージンや隙間をなくし、隣のセルと完全に結合させる
@@ -749,9 +758,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                         alignment: Alignment
                                                             .centerLeft,
                                                         child: Text(
-                                                          task.title.isEmpty
-                                                              ? '無題'
-                                                              : task.title,
+                                                          '${isDueDate ? '🎯 ' : ''}${task.title.isEmpty ? '無題' : task.title}',
                                                           style: TextStyle(
                                                             fontSize: 10,
                                                             color: colorScheme
