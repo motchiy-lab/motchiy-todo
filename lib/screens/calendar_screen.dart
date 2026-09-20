@@ -570,40 +570,46 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                           ),
                                           padding: const EdgeInsets.only(
                                             top: 2,
-                                            left: 4,
-                                            right: 4,
                                             bottom: 2,
                                           ),
                                           child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.stretch,
                                             children: [
-                                              Align(
-                                                alignment: Alignment.topRight,
-                                                child: Text(
-                                                  '${date.day}',
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight:
-                                                        isToday ||
-                                                            isSelected ||
-                                                            isInDragRange
-                                                        ? FontWeight.bold
-                                                        : FontWeight.normal,
-                                                    color: !isCurrentMonth
-                                                        ? (isDark
-                                                              ? Colors.grey[700]
-                                                              : Colors
-                                                                    .grey[400])
-                                                        : (date.weekday == 7
-                                                              ? Colors.red[400]
-                                                              : (date.weekday ==
-                                                                        6
-                                                                    ? Colors
-                                                                          .blue[400]
-                                                                    : (isDark
-                                                                          ? Colors.grey[300]
-                                                                          : Colors.grey[750]))),
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 4,
+                                                    ),
+                                                child: Align(
+                                                  alignment: Alignment.topRight,
+                                                  child: Text(
+                                                    '${date.day}',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          isToday ||
+                                                              isSelected ||
+                                                              isInDragRange
+                                                          ? FontWeight.bold
+                                                          : FontWeight.normal,
+                                                      color: !isCurrentMonth
+                                                          ? (isDark
+                                                                ? Colors
+                                                                      .grey[700]
+                                                                : Colors
+                                                                      .grey[400])
+                                                          : (date.weekday == 7
+                                                                ? Colors
+                                                                      .red[400]
+                                                                : (date.weekday ==
+                                                                          6
+                                                                      ? Colors
+                                                                            .blue[400]
+                                                                      : (isDark
+                                                                            ? Colors.grey[300]
+                                                                            : Colors.grey[750]))),
+                                                    ),
                                                   ),
                                                 ),
                                               ),
@@ -678,11 +684,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                               : Radius.zero,
                                                         );
 
-                                                    // セル同士の隙間をなくすため、左右の隙間をパディングやオフセットで調整
+                                                    // セル同士の隙間や区切り線をなくし、帯を滑らかに繋げるための調整
+                                                    final bool hasLeftCont =
+                                                        !(isWeekStart ||
+                                                            isStart);
+                                                    final bool hasRightCont =
+                                                        !(isWeekEnd || isEnd);
+
                                                     final double leftOffset =
-                                                        isWeekStart || isStart
-                                                        ? 0
-                                                        : -4;
+                                                        hasLeftCont
+                                                        ? -4.0
+                                                        : 4.0;
+                                                    final double rightExtra =
+                                                        hasRightCont
+                                                        ? 4.0
+                                                        : 0.0;
 
                                                     return Transform.translate(
                                                       offset: Offset(
@@ -700,13 +716,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                               (isWeekStart ||
                                                                   isStart)
                                                               ? 4
-                                                              : 2,
+                                                              : 0,
                                                           right:
-                                                              (isWeekEnd ||
-                                                                  isEnd)
-                                                              ? 4
-                                                              : 2,
+                                                              ((isWeekEnd ||
+                                                                      isEnd)
+                                                                  ? 4
+                                                                  : 0) +
+                                                              rightExtra,
                                                         ),
+                                                        // 右側のはみ出しを適用
+                                                        constraints:
+                                                            BoxConstraints(
+                                                              minWidth: 0,
+                                                            ),
                                                         decoration: BoxDecoration(
                                                           color:
                                                               task.isCompleted
