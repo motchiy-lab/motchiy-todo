@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'screens/main_screen.dart';
+import 'screens/auth_gate.dart';
 
 final List<Color> appThemes = [
   const Color(0xFF5C8374), // セージグリーン
@@ -99,7 +99,7 @@ class TaskApp extends StatelessWidget {
                 useMaterial3: true,
               ),
               themeMode: themeMode,
-              home: const MainScreen(),
+              home: const AuthGate(),
             );
           },
         );

@@ -12,7 +12,20 @@
           "package_name": "com.example.motchiy_todo"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "757056796917-22rmto4k7i3j7gfn0ddjm9bh29isk7te.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.motchiy_todo",
+            "certificate_hash": "31e363ecbf0d6ede83b56ea37b9173d1f4ab917c"
+          }
+        },
+        {
+          "client_id": "757056796917-v4pc91bs7l581ib38html8kkmuircl57.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDMlN9LZEwIjYapwf6r4YASqDon_BO-IUc"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "757056796917-v4pc91bs7l581ib38html8kkmuircl57.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "757056796917-lprasncifk02glm55m9r0eoj3sg3j447.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.motchiyTaskManager"
+              }
+            }
+          ]
         }
       }
     }

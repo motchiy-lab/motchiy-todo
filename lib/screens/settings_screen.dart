@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../main.dart';
 
@@ -11,10 +13,23 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  DocumentReference<Map<String, dynamic>> get _settingsDocument =>
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(FirebaseAuth.instance.currentUser!.uid);
+
+  Future<void> _saveCloudSettings(Map<String, dynamic> settings) async {
+    await _settingsDocument.set({
+      'settings': settings,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   Future<void> _changeTheme(int index) async {
     themeIndexNotifier.value = index;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('theme_color_index', index);
+    await _saveCloudSettings({'themeColorIndex': index});
     setState(() {});
   }
 
@@ -22,6 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     themeModeNotifier.value = mode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('theme_mode_index', mode.index);
+    await _saveCloudSettings({'themeModeIndex': mode.index});
     setState(() {});
   }
 
@@ -29,6 +45,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showNavLabelsNotifier.value = showLabels;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('show_nav_labels', showLabels);
+    await _saveCloudSettings({'showNavLabels': showLabels});
     setState(() {});
   }
 

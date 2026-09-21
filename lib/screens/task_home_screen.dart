@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'dart:convert';
 
@@ -21,6 +22,12 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
   bool _isLoading = true;
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, FocusNode> _focusNodes = {};
+
+  CollectionReference<Map<String, dynamic>> get _taskCollection =>
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(FirebaseAuth.instance.currentUser!.uid)
+          .collection('tasks');
 
   @override
   void initState() {
@@ -78,9 +85,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
 
   Future<void> _loadTasks() async {
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('tasks')
-          .get();
+      final snapshot = await _taskCollection.get();
       if (snapshot.docs.isNotEmpty) {
         setState(() {
           _tasks = snapshot.docs.map((doc) {
@@ -100,6 +105,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
             _tasks = decoded.map((item) => Task.fromJson(item)).toList();
             _isLoading = false;
           });
+          await _saveTasks();
         } else {
           setState(() {
             _tasks = [
@@ -147,7 +153,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
       final batch = FirebaseFirestore.instance.batch();
       // 既存のドキュメントを一旦クリアするか、各タスクをアップサートする
       for (var task in _tasks) {
-        final ref = FirebaseFirestore.instance.collection('tasks').doc(task.id);
+        final ref = _taskCollection.doc(task.id);
         batch.set(ref, task.toJson());
       }
       await batch.commit();

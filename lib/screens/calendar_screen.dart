@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/task.dart';
@@ -44,15 +46,33 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final prefs = await SharedPreferences.getInstance();
     final bool hintDismissed =
         prefs.getBool('calendar_hint_dismissed') ?? false;
-    final String? tasksString = prefs.getString('tasks_key');
     List<Task> loadedTasks = [];
-    if (tasksString != null) {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(FirebaseAuth.instance.currentUser!.uid)
+          .collection('tasks')
+          .get();
+      loadedTasks = snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return Task.fromJson(data);
+      }).toList();
+    } catch (_) {
+      final tasksString = prefs.getString('tasks_key');
+      if (tasksString != null) {
+        try {
+          final List<dynamic> decoded = jsonDecode(tasksString);
+          loadedTasks = decoded.map((item) => Task.fromJson(item)).toList();
+        } catch (_) {}
+      }
+    }
+    if (loadedTasks.isEmpty && prefs.getString('tasks_key') != null) {
       try {
+        final tasksString = prefs.getString('tasks_key')!;
         final List<dynamic> decoded = jsonDecode(tasksString);
         loadedTasks = decoded.map((item) => Task.fromJson(item)).toList();
-      } catch (e) {
-        // ignore
-      }
+      } catch (_) {}
     }
     setState(() {
       _showHint = !hintDismissed;
