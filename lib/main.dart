@@ -32,9 +32,7 @@ final ValueNotifier<int> themeIndexNotifier = ValueNotifier<int>(0);
 final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier<ThemeMode>(
   ThemeMode.system,
 );
-final ValueNotifier<bool> showNavLabelsOnHoverNotifier = ValueNotifier<bool>(
-  true,
-);
+final ValueNotifier<bool> showNavLabelsNotifier = ValueNotifier<bool>(true);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -52,8 +50,7 @@ void main() async {
   themeModeNotifier.value =
       ThemeMode.values[themeModeIndex.clamp(0, ThemeMode.values.length - 1)];
 
-  showNavLabelsOnHoverNotifier.value =
-      prefs.getBool('show_nav_labels_on_hover') ?? true;
+  showNavLabelsNotifier.value = prefs.getBool('show_nav_labels') ?? true;
 
   if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
     await windowManager.ensureInitialized();

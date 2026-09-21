@@ -10,6 +10,7 @@ import 'task_home_screen.dart';
 import 'wishlist_screen.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/nav_bar.dart';
+import '../main.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -21,6 +22,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int? _currentIndex = 2; // ToDoリスト is the 3rd tab (index 2)
   final GlobalKey<TaskHomeScreenState> _taskHomeScreenKey = GlobalKey();
+  late final PageController _pageController;
 
   late final List<Widget> _screens = [
     const CalendarScreen(),
@@ -37,13 +39,33 @@ class _MainScreenState extends State<MainScreen> {
     const SettingsScreen(),
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _currentIndex!);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
   void _onTabTapped(int index) {
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _onPageChanged(int index) {
     setState(() {
       _currentIndex = index;
-      if (index == 2) {
-        _taskHomeScreenKey.currentState?.loadTasks();
-      }
     });
+    if (index == 2) {
+      _taskHomeScreenKey.currentState?.loadTasks();
+    }
   }
 
   @override
@@ -68,61 +90,60 @@ class _MainScreenState extends State<MainScreen> {
                       ),
                     ),
                   )
-                : IndexedStack(index: _currentIndex, children: _screens),
+                : PageView(
+                    controller: _pageController,
+                    onPageChanged: _onPageChanged,
+                    children: _screens,
+                  ),
           ),
         ],
       ),
-      bottomNavigationBar: SizedBox(
-        height: 92,
-        child: Stack(
-          alignment: Alignment.bottomCenter,
-          clipBehavior: Clip.none,
-          children: [
-            Positioned(
-              bottom: 12,
-              left: 16,
-              right: 16,
-              height: 68,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? colorScheme.surfaceContainerHighest
-                      : Colors.white,
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, -4),
-                    ),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+      bottomNavigationBar: ValueListenableBuilder<bool>(
+        valueListenable: showNavLabelsNotifier,
+        builder: (context, showNavLabels, child) => Container(
+          height: 88,
+          decoration: BoxDecoration(
+            color: isDark ? colorScheme.surfaceContainerHighest : Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 14,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+            child: Row(
+              children: [
+                Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      final selectedIndex = _currentIndex;
+                      const circleSize = 64.0;
+                      final itemWidth = constraints.maxWidth / 5;
+                      final selectedLeft = _currentIndex == null
+                          ? 0.0
+                          : itemWidth * _currentIndex! +
+                                (itemWidth - circleSize) / 2;
+
                       return Stack(
-                        alignment: Alignment.center,
                         children: [
-                          if (selectedIndex != null)
-                            AnimatedAlign(
-                              alignment: Alignment(
-                                -0.8 + selectedIndex * 0.4,
-                                0,
-                              ),
+                          if (_currentIndex != null)
+                            AnimatedPositioned(
+                              left: selectedLeft,
+                              top: (80 - circleSize) / 2,
+                              width: circleSize,
+                              height: circleSize,
                               duration: const Duration(milliseconds: 300),
                               curve: Curves.easeOutCubic,
                               child: Container(
-                                width: 48,
-                                height: 48,
                                 decoration: BoxDecoration(
                                   color: colorScheme.primary,
                                   shape: BoxShape.circle,
                                   boxShadow: [
                                     BoxShadow(
                                       color: colorScheme.primary.withValues(
-                                        alpha: 0.35,
+                                        alpha: 0.3,
                                       ),
                                       blurRadius: 8,
                                       offset: const Offset(0, 3),
@@ -139,6 +160,7 @@ class _MainScreenState extends State<MainScreen> {
                                   outlineIcon: Icons.calendar_month_outlined,
                                   filledIcon: Icons.calendar_month,
                                   label: 'カレンダー',
+                                  showLabel: showNavLabels,
                                   currentIndex: _currentIndex ?? -1,
                                   selectedColor: colorScheme.onPrimary,
                                   onTap: _onTabTapped,
@@ -150,6 +172,7 @@ class _MainScreenState extends State<MainScreen> {
                                   outlineIcon: Icons.card_giftcard_outlined,
                                   filledIcon: Icons.card_giftcard,
                                   label: '欲しいもの',
+                                  showLabel: showNavLabels,
                                   currentIndex: _currentIndex ?? -1,
                                   selectedColor: colorScheme.onPrimary,
                                   onTap: _onTabTapped,
@@ -161,6 +184,7 @@ class _MainScreenState extends State<MainScreen> {
                                   outlineIcon: Icons.checklist_outlined,
                                   filledIcon: Icons.checklist,
                                   label: 'ToDoリスト',
+                                  showLabel: showNavLabels,
                                   currentIndex: _currentIndex ?? -1,
                                   selectedColor: colorScheme.onPrimary,
                                   onTap: _onTabTapped,
@@ -172,6 +196,7 @@ class _MainScreenState extends State<MainScreen> {
                                   outlineIcon: Icons.lightbulb_outline,
                                   filledIcon: Icons.lightbulb,
                                   label: 'アイデア',
+                                  showLabel: showNavLabels,
                                   currentIndex: _currentIndex ?? -1,
                                   selectedColor: colorScheme.onPrimary,
                                   onTap: _onTabTapped,
@@ -183,6 +208,7 @@ class _MainScreenState extends State<MainScreen> {
                                   outlineIcon: Icons.settings_outlined,
                                   filledIcon: Icons.settings,
                                   label: '設定',
+                                  showLabel: showNavLabels,
                                   currentIndex: _currentIndex ?? -1,
                                   selectedColor: colorScheme.onPrimary,
                                   onTap: _onTabTapped,
@@ -195,9 +221,9 @@ class _MainScreenState extends State<MainScreen> {
                     },
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

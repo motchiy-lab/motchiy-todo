@@ -25,10 +25,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {});
   }
 
-  Future<void> _changeShowNavLabels(bool value) async {
-    showNavLabelsOnHoverNotifier.value = value;
+  Future<void> _changeNavDisplayMode(bool showLabels) async {
+    showNavLabelsNotifier.value = showLabels;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('show_nav_labels_on_hover', value);
+    await prefs.setBool('show_nav_labels', showLabels);
     setState(() {});
   }
 
@@ -176,58 +176,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 32),
               const Text(
-                'ナビゲーション',
+                'ナビゲーション表示モード',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               Text(
-                'タブ切り替えボタンにホバーしたときのラベル表示を設定します',
+                'タブ切り替えボタンの表示方法を選択できます',
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark ? Colors.grey[400] : Colors.grey[600],
                 ),
               ),
-              const SizedBox(height: 16),
-              InkWell(
-                onTap: () =>
-                    _changeShowNavLabels(!showNavLabelsOnHoverNotifier.value),
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey[900] : Colors.grey[100],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark ? Colors.grey[800]! : Colors.grey[300]!,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.label_outline,
-                        size: 20,
-                        color: colorScheme.primary,
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'ホバー時にラベルを表示する',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      Switch(
-                        value: showNavLabelsOnHoverNotifier.value,
-                        onChanged: (value) => _changeShowNavLabels(value),
-                      ),
-                    ],
-                  ),
-                ),
+              const SizedBox(height: 8),
+              RadioListTile<bool>(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('シンプル'),
+                value: false,
+                groupValue: showNavLabelsNotifier.value,
+                onChanged: (value) {
+                  if (value != null) _changeNavDisplayMode(value);
+                },
+              ),
+              RadioListTile<bool>(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('詳細'),
+                value: true,
+                groupValue: showNavLabelsNotifier.value,
+                onChanged: (value) {
+                  if (value != null) _changeNavDisplayMode(value);
+                },
               ),
             ],
           ),
