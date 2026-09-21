@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -75,34 +77,83 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
   Future<void> loadTasks() => _loadTasks();
 
   Future<void> _loadTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? tasksString = prefs.getString('tasks_key');
-    if (tasksString != null) {
-      try {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('tasks')
+          .get();
+      if (snapshot.docs.isNotEmpty) {
+        setState(() {
+          _tasks = snapshot.docs.map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            return Task.fromJson(data);
+          }).toList();
+          _isLoading = false;
+        });
+      } else {
+        // Firestoreが空の場合はローカルから読み込むかデフォルトを作成
+        final prefs = await SharedPreferences.getInstance();
+        final String? tasksString = prefs.getString('tasks_key');
+        if (tasksString != null) {
+          final List<dynamic> decoded = jsonDecode(tasksString);
+          setState(() {
+            _tasks = decoded.map((item) => Task.fromJson(item)).toList();
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _tasks = [
+              Task(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                title: '',
+              ),
+            ];
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      // オフライン時などはローカルにフォールバック
+      final prefs = await SharedPreferences.getInstance();
+      final String? tasksString = prefs.getString('tasks_key');
+      if (tasksString != null) {
         final List<dynamic> decoded = jsonDecode(tasksString);
         setState(() {
           _tasks = decoded.map((item) => Task.fromJson(item)).toList();
           _isLoading = false;
         });
-      } catch (e) {
+      } else {
         setState(() {
+          _tasks = [
+            Task(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              title: '',
+            ),
+          ];
           _isLoading = false;
         });
       }
-    } else {
-      setState(() {
-        _tasks = [
-          Task(id: DateTime.now().millisecondsSinceEpoch.toString(), title: ''),
-        ];
-        _isLoading = false;
-      });
     }
   }
 
   Future<void> _saveTasks() async {
+    // ローカルにも保存
     final prefs = await SharedPreferences.getInstance();
     final String encoded = jsonEncode(_tasks.map((t) => t.toJson()).toList());
     await prefs.setString('tasks_key', encoded);
+
+    // Firestoreに保存
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      // 既存のドキュメントを一旦クリアするか、各タスクをアップサートする
+      for (var task in _tasks) {
+        final ref = FirebaseFirestore.instance.collection('tasks').doc(task.id);
+        batch.set(ref, task.toJson());
+      }
+      await batch.commit();
+    } catch (e) {
+      // オフライン時のエラーなどは無視（次回オンライン時に同期またはローカル継続）
+    }
   }
 
   void _insertTaskBelow(Task currentTask) {
