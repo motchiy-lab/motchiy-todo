@@ -429,19 +429,21 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: 56,
         leading: Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
           child: CircleAvatar(
             backgroundColor: Theme.of(context)
                 .colorScheme
                 .surfaceContainerHighest,
             child: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new, size: 16),
+              icon: const Icon(Icons.close, size: 16),
               color: Theme.of(context).colorScheme.onSurface,
               onPressed: widget.onBack,
             ),
           ),
         ),
+        titleSpacing: 8,
         title: const Text('ToDoリスト'),
         elevation: 0,
       ),
