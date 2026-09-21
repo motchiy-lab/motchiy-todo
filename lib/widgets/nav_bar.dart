@@ -35,11 +35,15 @@ class NavItem extends StatelessWidget {
       onTap: () => onTap(index),
       child: SizedBox(
         height: 80,
+<<<<<<< HEAD
         width: double.infinity,
+=======
+>>>>>>> 1c67c562e4444c4a0fd22a23643848d263b20025
         child: Stack(
           alignment: Alignment.center,
           children: [
             if (isSelected)
+<<<<<<< HEAD
               AnimatedContainer(
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeOutCubic,
@@ -69,6 +73,40 @@ class NavItem extends StatelessWidget {
                     color: color,
                     size: 22,
                   ),
+=======
+              Positioned(
+                top: 7,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  width: indicatorSize,
+                  height: indicatorSize,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: colorScheme.primary.withValues(alpha: 0.28),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Icon(
+                    isSelected ? filledIcon : outlineIcon,
+                    color: color,
+                    size: 22,
+                  ),
+>>>>>>> 1c67c562e4444c4a0fd22a23643848d263b20025
                   if (showLabel) ...[
                     const SizedBox(height: 6),
                     SizedBox(
