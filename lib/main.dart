@@ -38,7 +38,13 @@ final ValueNotifier<bool> showNavLabelsOnHoverNotifier = ValueNotifier<bool>(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('Firebase init failed: $e');
+  }
   final prefs = await SharedPreferences.getInstance();
   themeIndexNotifier.value = prefs.getInt('theme_color_index') ?? 0;
 

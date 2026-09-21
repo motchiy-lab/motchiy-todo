@@ -8,47 +8,49 @@ class CustomTitleBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Container(
-      height: 32,
-      color: isDark ? Colors.grey[900] : Colors.grey[100],
-      child: Row(
-        children: [
-          Expanded(
-            child: DragToMoveArea(
-              child: Container(
-                alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  'Motchiy ToDo',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+    return ExcludeSemantics(
+      child: Container(
+        height: 32,
+        color: isDark ? Colors.grey[900] : Colors.grey[100],
+        child: Row(
+          children: [
+            Expanded(
+              child: DragToMoveArea(
+                child: Container(
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'Motchiy ToDo',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          WindowButton(
-            icon: Icons.remove,
-            onPressed: () => windowManager.minimize(),
-          ),
-          WindowButton(
-            icon: Icons.square_outlined,
-            onPressed: () async {
-              if (await windowManager.isMaximized()) {
-                windowManager.unmaximize();
-              } else {
-                windowManager.maximize();
-              }
-            },
-          ),
-          WindowButton(
-            icon: Icons.close,
-            isClose: true,
-            onPressed: () => windowManager.close(),
-          ),
-        ],
+            WindowButton(
+              icon: Icons.remove,
+              onPressed: () => windowManager.minimize(),
+            ),
+            WindowButton(
+              icon: Icons.square_outlined,
+              onPressed: () async {
+                if (await windowManager.isMaximized()) {
+                  windowManager.unmaximize();
+                } else {
+                  windowManager.maximize();
+                }
+              },
+            ),
+            WindowButton(
+              icon: Icons.close,
+              isClose: true,
+              onPressed: () => windowManager.close(),
+            ),
+          ],
+        ),
       ),
     );
   }
