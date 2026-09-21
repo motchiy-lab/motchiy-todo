@@ -100,137 +100,113 @@ class _MainScreenState extends State<MainScreen> {
       ),
       bottomNavigationBar: ValueListenableBuilder<bool>(
         valueListenable: showNavLabelsNotifier,
-        builder: (context, showNavLabels, child) => SafeArea(
-          top: false,
-          minimum: const EdgeInsets.only(bottom: 16),
-          child: Container(
-            height: 88,
-            decoration: BoxDecoration(
-              color: isDark
-                  ? colorScheme.surfaceContainerHighest
-                  : Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.12),
-                  blurRadius: 14,
-                  offset: const Offset(0, -4),
-                ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        const circleSize = 64.0;
-                        final itemWidth = constraints.maxWidth / 5;
-                        final selectedLeft = _currentIndex == null
-                            ? 0.0
-                            : itemWidth * _currentIndex! +
-                                  (itemWidth - circleSize) / 2;
+        builder: (context, showNavLabels, child) {
+          final navBarColor = isDark
+              ? colorScheme.surfaceContainerHighest
+              : Colors.white;
 
-                        return Stack(
-                          children: [
-                            if (_currentIndex != null)
-                              AnimatedPositioned(
-                                left: selectedLeft,
-                                top: (80 - circleSize) / 2,
-                                width: circleSize,
-                                height: circleSize,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOutCubic,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.primary,
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: colorScheme.primary.withValues(
-                                          alpha: 0.3,
-                                        ),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 3),
-                                      ),
-                                    ],
-                                  ),
+          return SafeArea(
+            top: false,
+            child: ColoredBox(
+              color: navBarColor,
+              child: Container(
+                height: 88,
+                decoration: BoxDecoration(
+                  color: navBarColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.12),
+                      blurRadius: 14,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final maxContentWidth = 420.0;
+                    final availableWidth = constraints.maxWidth;
+
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+                      child: Align(
+                        alignment: Alignment.center,
+                        child: SizedBox(
+                          width: availableWidth > maxContentWidth
+                              ? maxContentWidth
+                              : availableWidth,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: NavItem(
+                                  index: 0,
+                                  outlineIcon: Icons.calendar_month_outlined,
+                                  filledIcon: Icons.calendar_month,
+                                  label: 'カレンダー',
+                                  showLabel: showNavLabels,
+                                  currentIndex: _currentIndex ?? -1,
+                                  selectedColor: colorScheme.onPrimary,
+                                  onTap: _onTabTapped,
                                 ),
                               ),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: NavItem(
-                                    index: 0,
-                                    outlineIcon: Icons.calendar_month_outlined,
-                                    filledIcon: Icons.calendar_month,
-                                    label: 'カレンダー',
-                                    showLabel: showNavLabels,
-                                    currentIndex: _currentIndex ?? -1,
-                                    selectedColor: colorScheme.onPrimary,
-                                    onTap: _onTabTapped,
-                                  ),
+                              Expanded(
+                                child: NavItem(
+                                  index: 1,
+                                  outlineIcon: Icons.card_giftcard_outlined,
+                                  filledIcon: Icons.card_giftcard,
+                                  label: '欲しいもの',
+                                  showLabel: showNavLabels,
+                                  currentIndex: _currentIndex ?? -1,
+                                  selectedColor: colorScheme.onPrimary,
+                                  onTap: _onTabTapped,
                                 ),
-                                Expanded(
-                                  child: NavItem(
-                                    index: 1,
-                                    outlineIcon: Icons.card_giftcard_outlined,
-                                    filledIcon: Icons.card_giftcard,
-                                    label: '欲しいもの',
-                                    showLabel: showNavLabels,
-                                    currentIndex: _currentIndex ?? -1,
-                                    selectedColor: colorScheme.onPrimary,
-                                    onTap: _onTabTapped,
-                                  ),
+                              ),
+                              Expanded(
+                                child: NavItem(
+                                  index: 2,
+                                  outlineIcon: Icons.checklist_outlined,
+                                  filledIcon: Icons.checklist,
+                                  label: 'ToDoリスト',
+                                  showLabel: showNavLabels,
+                                  currentIndex: _currentIndex ?? -1,
+                                  selectedColor: colorScheme.onPrimary,
+                                  onTap: _onTabTapped,
                                 ),
-                                Expanded(
-                                  child: NavItem(
-                                    index: 2,
-                                    outlineIcon: Icons.checklist_outlined,
-                                    filledIcon: Icons.checklist,
-                                    label: 'ToDoリスト',
-                                    showLabel: showNavLabels,
-                                    currentIndex: _currentIndex ?? -1,
-                                    selectedColor: colorScheme.onPrimary,
-                                    onTap: _onTabTapped,
-                                  ),
+                              ),
+                              Expanded(
+                                child: NavItem(
+                                  index: 3,
+                                  outlineIcon: Icons.lightbulb_outline,
+                                  filledIcon: Icons.lightbulb,
+                                  label: 'アイデア',
+                                  showLabel: showNavLabels,
+                                  currentIndex: _currentIndex ?? -1,
+                                  selectedColor: colorScheme.onPrimary,
+                                  onTap: _onTabTapped,
                                 ),
-                                Expanded(
-                                  child: NavItem(
-                                    index: 3,
-                                    outlineIcon: Icons.lightbulb_outline,
-                                    filledIcon: Icons.lightbulb,
-                                    label: 'アイデア',
-                                    showLabel: showNavLabels,
-                                    currentIndex: _currentIndex ?? -1,
-                                    selectedColor: colorScheme.onPrimary,
-                                    onTap: _onTabTapped,
-                                  ),
+                              ),
+                              Expanded(
+                                child: NavItem(
+                                  index: 4,
+                                  outlineIcon: Icons.settings_outlined,
+                                  filledIcon: Icons.settings,
+                                  label: '設定',
+                                  showLabel: showNavLabels,
+                                  currentIndex: _currentIndex ?? -1,
+                                  selectedColor: colorScheme.onPrimary,
+                                  onTap: _onTabTapped,
                                 ),
-                                Expanded(
-                                  child: NavItem(
-                                    index: 4,
-                                    outlineIcon: Icons.settings_outlined,
-                                    filledIcon: Icons.settings,
-                                    label: '設定',
-                                    showLabel: showNavLabels,
-                                    currentIndex: _currentIndex ?? -1,
-                                    selectedColor: colorScheme.onPrimary,
-                                    onTap: _onTabTapped,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
