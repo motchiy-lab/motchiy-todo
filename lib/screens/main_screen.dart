@@ -19,13 +19,20 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _currentIndex = 2; // ToDoリスト is the 3rd tab (index 2)
+  int? _currentIndex = 2; // ToDoリスト is the 3rd tab (index 2)
   final GlobalKey<TaskHomeScreenState> _taskHomeScreenKey = GlobalKey();
 
   late final List<Widget> _screens = [
     const CalendarScreen(),
     const WishlistScreen(),
-    TaskHomeScreen(key: _taskHomeScreenKey, onBack: () => _onTabTapped(0)),
+    TaskHomeScreen(
+      key: _taskHomeScreenKey,
+      onBack: () {
+        setState(() {
+          _currentIndex = null;
+        });
+      },
+    ),
     const IdeaScreen(),
     const SettingsScreen(),
   ];
@@ -51,98 +58,106 @@ class _MainScreenState extends State<MainScreen> {
               (Platform.isWindows || Platform.isMacOS || Platform.isLinux))
             const CustomTitleBar(),
           Expanded(
-            child: IndexedStack(index: _currentIndex, children: _screens),
+            child: _currentIndex == null
+                ? Center(
+                    child: Text(
+                      'ToDoリストを閉じました',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 16,
+                      ),
+                    ),
+                  )
+                : IndexedStack(index: _currentIndex, children: _screens),
           ),
         ],
       ),
-      bottomNavigationBar: _currentIndex == 2
-          ? null
-          : SizedBox(
+      bottomNavigationBar: SizedBox(
+        height: 75,
+        child: Stack(
+          alignment: Alignment.bottomCenter,
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              bottom: -20,
+              left: 16,
+              right: 16,
               height: 75,
-              child: Stack(
-                alignment: Alignment.bottomCenter,
-                clipBehavior: Clip.none,
-                children: [
-                  Positioned(
-                    bottom: -20,
-                    left: 16,
-                    right: 16,
-                    height: 75,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? colorScheme.surfaceContainerHighest
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(28),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 10,
-                            offset: const Offset(0, -4),
-                          ),
-                        ],
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // 左側の2つのアイテム
-                            NavItem(
-                              index: 0,
-                              outlineIcon: Icons.calendar_month_outlined,
-                              filledIcon: Icons.calendar_month,
-                              label: 'カレンダー',
-                              currentIndex: _currentIndex,
-                              onTap: _onTabTapped,
-                            ),
-                            const SizedBox(width: 12),
-                            NavItem(
-                              index: 1,
-                              outlineIcon: Icons.card_giftcard_outlined,
-                              filledIcon: Icons.card_giftcard,
-                              label: '欲しいもの',
-                              currentIndex: _currentIndex,
-                              onTap: _onTabTapped,
-                            ),
-                            // 中央のボタンのためのスペース（空白をあける）
-                            const SizedBox(width: 70),
-                            // 右側の2つのアイテム
-                            NavItem(
-                              index: 3,
-                              outlineIcon: Icons.lightbulb_outline,
-                              filledIcon: Icons.lightbulb,
-                              label: 'アイデア',
-                              currentIndex: _currentIndex,
-                              onTap: _onTabTapped,
-                            ),
-                            const SizedBox(width: 12),
-                            NavItem(
-                              index: 4,
-                              outlineIcon: Icons.settings_outlined,
-                              filledIcon: Icons.settings,
-                              label: '設定',
-                              currentIndex: _currentIndex,
-                              onTap: _onTabTapped,
-                            ),
-                          ],
-                        ),
-                      ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? colorScheme.surfaceContainerHighest
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, -4),
                     ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // 左側の2つのアイテム
+                      NavItem(
+                        index: 0,
+                        outlineIcon: Icons.calendar_month_outlined,
+                        filledIcon: Icons.calendar_month,
+                        label: 'カレンダー',
+                        currentIndex: _currentIndex ?? -1,
+                        onTap: _onTabTapped,
+                      ),
+                      const SizedBox(width: 12),
+                      NavItem(
+                        index: 1,
+                        outlineIcon: Icons.card_giftcard_outlined,
+                        filledIcon: Icons.card_giftcard,
+                        label: '欲しいもの',
+                        currentIndex: _currentIndex ?? -1,
+                        onTap: _onTabTapped,
+                      ),
+                      // 中央のボタンのためのスペース（空白をあける）
+                      const SizedBox(width: 70),
+                      // 右側の2つのアイテム
+                      NavItem(
+                        index: 3,
+                        outlineIcon: Icons.lightbulb_outline,
+                        filledIcon: Icons.lightbulb,
+                        label: 'アイデア',
+                        currentIndex: _currentIndex ?? -1,
+                        onTap: _onTabTapped,
+                      ),
+                      const SizedBox(width: 12),
+                      NavItem(
+                        index: 4,
+                        outlineIcon: Icons.settings_outlined,
+                        filledIcon: Icons.settings,
+                        label: '設定',
+                        currentIndex: _currentIndex ?? -1,
+                        onTap: _onTabTapped,
+                      ),
+                    ],
                   ),
-                  Positioned(
-                    bottom: 0,
-                    child: CenterNavItem(
-                      index: 2,
-                      filledIcon: Icons.checklist,
-                      label: 'ToDoリスト',
-                      currentIndex: _currentIndex,
-                      onTap: _onTabTapped,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
+            Positioned(
+              bottom: 0,
+              child: CenterNavItem(
+                index: 2,
+                filledIcon: Icons.checklist,
+                label: 'ToDoリスト',
+                currentIndex: _currentIndex ?? -1,
+                onTap: _onTabTapped,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
