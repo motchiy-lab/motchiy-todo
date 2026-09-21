@@ -431,28 +431,6 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
                             ),
                           ),
                         ),
-                        if (!task.isCompleted) ...[
-                          const SizedBox(width: 4),
-                          InkWell(
-                            onTap: () {
-                              setState(() {
-                                task.startDate = null;
-                                task.dueDate = null;
-                                task.hasDueDate = false;
-                              });
-                              _saveTasks();
-                            },
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.all(2),
-                              child: Icon(
-                                Icons.close,
-                                size: 12,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),
@@ -465,12 +443,6 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
             icon: const Icon(Icons.track_changes, size: 18, color: Colors.grey),
             onPressed: () => _selectDueDate(task),
             tooltip: task.dueDate != null ? '期限を変更' : '期限を追加',
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.close, size: 18, color: Colors.grey),
-            onPressed: () => _deleteTask(task),
-            tooltip: '削除',
           ),
         ],
       ),
@@ -486,22 +458,15 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leadingWidth: 56,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
-          child: CircleAvatar(
-            backgroundColor: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest,
-            child: IconButton(
-              icon: const Icon(Icons.close, size: 16),
-              color: Theme.of(context).colorScheme.onSurface,
-              onPressed: widget.onBack,
-            ),
+        backgroundColor: Colors.transparent,
+        titleSpacing: 16,
+        title: Text(
+          'ToDoリスト',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
+            fontWeight: FontWeight.bold,
           ),
         ),
-        titleSpacing: 8,
-        title: const Text('ToDoリスト'),
         elevation: 0,
       ),
       body: GestureDetector(

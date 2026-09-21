@@ -273,612 +273,643 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final gridDays = _getGridDays();
     final selectedDateTasks = _getTasksForDate(_selectedDate);
 
-    return SafeArea(
-      child: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 750),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header: Year/Month & Controls
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          'カレンダー',
+          style: TextStyle(
+            color: colorScheme.primary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      body: SafeArea(
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 750),
+                  child: RefreshIndicator(
+                    onRefresh: _loadTasks,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            '${_currentMonth.year}年 ${_currentMonth.month}月',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              OutlinedButton(
-                                onPressed: _goToToday,
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                child: const Text(
-                                  '今日',
-                                  style: TextStyle(fontSize: 13),
+                              Text(
+                                '${_currentMonth.year}年 ${_currentMonth.month}月',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                icon: const Icon(Icons.chevron_left),
-                                onPressed: _previousMonth,
-                                tooltip: '前の月',
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.chevron_right),
-                                onPressed: _nextMonth,
-                                tooltip: '次の月',
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      if (_showHint) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.grey[850] : Colors.grey[100],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '💡 ヒント: カレンダー上でドラッグして1日または複数日の予定を追加し、日付をクリックしてその日の予定一覧を表示できます',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isDark
-                                        ? Colors.grey[300]
-                                        : Colors.grey[700],
-                                  ),
-                                ),
-                              ),
-                              SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: IconButton(
-                                  padding: EdgeInsets.zero,
-                                  icon: const Icon(Icons.close, size: 16),
-                                  color: isDark
-                                      ? Colors.grey[400]
-                                      : Colors.grey[600],
-                                  tooltip: '閉じる',
-                                  onPressed: () async {
-                                    setState(() {
-                                      _showHint = false;
-                                    });
-                                    final prefs =
-                                        await SharedPreferences.getInstance();
-                                    await prefs.setBool(
-                                      'calendar_hint_dismissed',
-                                      true,
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-
-                      // Calendar Card Container with Drag Selection
-                      Card(
-                        elevation: 1,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            children: [
-                              // Weekday Header
                               Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceAround,
                                 children: [
-                                  _buildWeekdayLabel('日', Colors.red[400]!),
-                                  _buildWeekdayLabel('月', null),
-                                  _buildWeekdayLabel('火', null),
-                                  _buildWeekdayLabel('水', null),
-                                  _buildWeekdayLabel('木', null),
-                                  _buildWeekdayLabel('金', null),
-                                  _buildWeekdayLabel('土', Colors.blue[400]!),
+                                  OutlinedButton(
+                                    onPressed: _goToToday,
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: const Text(
+                                      '今日',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: const Icon(Icons.chevron_left),
+                                    onPressed: _previousMonth,
+                                    tooltip: '前の月',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.chevron_right),
+                                    onPressed: _nextMonth,
+                                    tooltip: '次の月',
+                                  ),
                                 ],
                               ),
-                              const Divider(height: 16),
-
-                              // Days Grid with GestureDetector for dragging and single click selection
-                              GestureDetector(
-                                key: _gridKey,
-                                onPanStart: (details) {
-                                  final date = _getDateFromLocalPosition(
-                                    details.localPosition,
-                                    gridDays,
-                                  );
-                                  if (date != null) {
-                                    setState(() {
-                                      _isDragging = true;
-                                      _dragStartDate = date;
-                                      _dragEndDate = date;
-                                    });
-                                  }
-                                },
-                                onPanUpdate: (details) {
-                                  if (_isDragging) {
-                                    final date = _getDateFromLocalPosition(
-                                      details.localPosition,
-                                      gridDays,
-                                    );
-                                    if (date != null && date != _dragEndDate) {
-                                      setState(() {
-                                        _dragEndDate = date;
-                                      });
-                                    }
-                                  }
-                                },
-                                onPanEnd: (details) {
-                                  if (_isDragging &&
-                                      _dragStartDate != null &&
-                                      _dragEndDate != null) {
-                                    final start = _dragStartDate!;
-                                    final end = _dragEndDate!;
-
-                                    setState(() {
-                                      _isDragging = false;
-                                      _dragStartDate = null;
-                                      _dragEndDate = null;
-                                    });
-
-                                    _createTaskForRange(start, end);
-                                  } else {
-                                    setState(() {
-                                      _isDragging = false;
-                                      _dragStartDate = null;
-                                      _dragEndDate = null;
-                                    });
-                                  }
-                                },
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: isDark
-                                          ? Colors.grey[800]!
-                                          : Colors.grey[350]!,
-                                      width: 1,
+                            ],
+                          ),
+                          if (_showHint) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.grey[850]
+                                    : Colors.grey[100],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '💡 ヒント: カレンダー上でドラッグして1日または複数日の予定を追加し、日付をクリックしてその日の予定一覧を表示できます',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDark
+                                            ? Colors.grey[300]
+                                            : Colors.grey[700],
+                                      ),
                                     ),
-                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: GridView.builder(
-                                    shrinkWrap: true,
-                                    physics:
-                                        const NeverScrollableScrollPhysics(),
-                                    gridDelegate:
-                                        const SliverGridDelegateWithFixedCrossAxisCount(
-                                          crossAxisCount: 7,
-                                          childAspectRatio: 1.15,
-                                        ),
-                                    itemCount: gridDays.length,
-                                    itemBuilder: (context, index) {
-                                      final item = gridDays[index];
-                                      final DateTime date = item['date'];
-                                      final bool isCurrentMonth =
-                                          item['isCurrentMonth'];
-
-                                      final now = DateTime.now();
-                                      final bool isToday =
-                                          date.year == now.year &&
-                                          date.month == now.month &&
-                                          date.day == now.day;
-
-                                      final bool isSelected =
-                                          date.year == _selectedDate.year &&
-                                          date.month == _selectedDate.month &&
-                                          date.day == _selectedDate.day;
-
-                                      // Check if date is within current drag range
-                                      bool isInDragRange = false;
+                                  SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: IconButton(
+                                      padding: EdgeInsets.zero,
+                                      icon: const Icon(Icons.close, size: 16),
+                                      color: isDark
+                                          ? Colors.grey[400]
+                                          : Colors.grey[600],
+                                      tooltip: '閉じる',
+                                      onPressed: () async {
+                                        setState(() {
+                                          _showHint = false;
+                                        });
+                                        final prefs =
+                                            await SharedPreferences.getInstance();
+                                        await prefs.setBool(
+                                          'calendar_hint_dismissed',
+                                          true,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          Card(
+                            elevation: 1,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceAround,
+                                    children: [
+                                      _buildWeekdayLabel('日', Colors.red[400]!),
+                                      _buildWeekdayLabel('月', null),
+                                      _buildWeekdayLabel('火', null),
+                                      _buildWeekdayLabel('水', null),
+                                      _buildWeekdayLabel('木', null),
+                                      _buildWeekdayLabel('金', null),
+                                      _buildWeekdayLabel(
+                                        '土',
+                                        Colors.blue[400]!,
+                                      ),
+                                    ],
+                                  ),
+                                  const Divider(height: 16),
+                                  GestureDetector(
+                                    key: _gridKey,
+                                    onPanStart: (details) {
+                                      final date = _getDateFromLocalPosition(
+                                        details.localPosition,
+                                        gridDays,
+                                      );
+                                      if (date != null) {
+                                        setState(() {
+                                          _isDragging = true;
+                                          _dragStartDate = date;
+                                          _dragEndDate = date;
+                                        });
+                                      }
+                                    },
+                                    onPanUpdate: (details) {
+                                      if (_isDragging) {
+                                        final date = _getDateFromLocalPosition(
+                                          details.localPosition,
+                                          gridDays,
+                                        );
+                                        if (date != null &&
+                                            date != _dragEndDate) {
+                                          setState(() {
+                                            _dragEndDate = date;
+                                          });
+                                        }
+                                      }
+                                    },
+                                    onPanEnd: (details) {
                                       if (_isDragging &&
                                           _dragStartDate != null &&
                                           _dragEndDate != null) {
-                                        final s =
-                                            _dragStartDate!.isBefore(
-                                              _dragEndDate!,
-                                            )
-                                            ? _dragStartDate!
-                                            : _dragEndDate!;
-                                        final e =
-                                            _dragEndDate!.isAfter(
-                                              _dragStartDate!,
-                                            )
-                                            ? _dragEndDate!
-                                            : _dragStartDate!;
-                                        final dNorm = DateTime(
-                                          date.year,
-                                          date.month,
-                                          date.day,
-                                        );
-                                        final sNorm = DateTime(
-                                          s.year,
-                                          s.month,
-                                          s.day,
-                                        );
-                                        final eNorm = DateTime(
-                                          e.year,
-                                          e.month,
-                                          e.day,
-                                        );
-                                        isInDragRange =
-                                            !dNorm.isBefore(sNorm) &&
-                                            !dNorm.isAfter(eNorm);
+                                        final start = _dragStartDate!;
+                                        final end = _dragEndDate!;
+
+                                        setState(() {
+                                          _isDragging = false;
+                                          _dragStartDate = null;
+                                          _dragEndDate = null;
+                                        });
+
+                                        _createTaskForRange(start, end);
+                                      } else {
+                                        setState(() {
+                                          _isDragging = false;
+                                          _dragStartDate = null;
+                                          _dragEndDate = null;
+                                        });
                                       }
-
-                                      final dayTasks = _getTasksForDate(date);
-
-                                      // セルの枠線（格子状）
-                                      final borderColor = isDark
-                                          ? Colors.grey[800]!
-                                          : Colors.grey[300]!;
-
-                                      return InkWell(
-                                        onTap: () {
-                                          setState(() {
-                                            _selectedDate = date;
-                                            if (!isCurrentMonth) {
-                                              _currentMonth = DateTime(
-                                                date.year,
-                                                date.month,
-                                                1,
-                                              );
-                                            }
-                                          });
-                                        },
-                                        borderRadius: BorderRadius.circular(2),
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            color: isInDragRange
-                                                ? colorScheme.primary
-                                                      .withValues(alpha: 0.3)
-                                                : (isSelected
-                                                      ? colorScheme.primary
-                                                            .withValues(
-                                                              alpha: 0.15,
-                                                            )
-                                                      : (isToday
-                                                            ? colorScheme
-                                                                  .secondaryContainer
-                                                                  .withValues(
-                                                                    alpha: 0.4,
-                                                                  )
-                                                            : Colors
-                                                                  .transparent)),
-                                            border: Border(
-                                              right: BorderSide(
-                                                color: (index % 7 != 6)
-                                                    ? borderColor
-                                                    : Colors.transparent,
-                                                width: 0.5,
-                                              ),
-                                              bottom: BorderSide(
-                                                color:
-                                                    (index <
-                                                        gridDays.length - 7)
-                                                    ? borderColor
-                                                    : Colors.transparent,
-                                                width: 0.5,
-                                              ),
+                                    },
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: isDark
+                                              ? Colors.grey[800]!
+                                              : Colors.grey[350]!,
+                                          width: 1,
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: GridView.builder(
+                                        shrinkWrap: true,
+                                        physics:
+                                            const NeverScrollableScrollPhysics(),
+                                        gridDelegate:
+                                            const SliverGridDelegateWithFixedCrossAxisCount(
+                                              crossAxisCount: 7,
+                                              childAspectRatio: 1.15,
                                             ),
-                                          ),
-                                          padding: const EdgeInsets.only(
-                                            top: 2,
-                                            left: 4,
-                                            right: 4,
-                                            bottom: 2,
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              Align(
-                                                alignment: Alignment.topRight,
-                                                child: Text(
-                                                  '${date.day}',
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight:
-                                                        isToday ||
-                                                            isSelected ||
-                                                            isInDragRange
-                                                        ? FontWeight.bold
-                                                        : FontWeight.normal,
-                                                    color: !isCurrentMonth
-                                                        ? (isDark
-                                                              ? Colors.grey[700]
-                                                              : Colors
-                                                                    .grey[400])
-                                                        : (date.weekday == 7
-                                                              ? Colors.red[400]
-                                                              : (date.weekday ==
-                                                                        6
-                                                                    ? Colors
-                                                                          .blue[400]
-                                                                    : (isDark
-                                                                          ? Colors.grey[300]
-                                                                          : Colors.grey[750]))),
+                                        itemCount: gridDays.length,
+                                        itemBuilder: (context, index) {
+                                          final item = gridDays[index];
+                                          final DateTime date = item['date'];
+                                          final bool isCurrentMonth =
+                                              item['isCurrentMonth'];
+
+                                          final now = DateTime.now();
+                                          final bool isToday =
+                                              date.year == now.year &&
+                                              date.month == now.month &&
+                                              date.day == now.day;
+
+                                          final bool isSelected =
+                                              date.year == _selectedDate.year &&
+                                              date.month ==
+                                                  _selectedDate.month &&
+                                              date.day == _selectedDate.day;
+
+                                          bool isInDragRange = false;
+                                          if (_isDragging &&
+                                              _dragStartDate != null &&
+                                              _dragEndDate != null) {
+                                            final s =
+                                                _dragStartDate!.isBefore(
+                                                  _dragEndDate!,
+                                                )
+                                                ? _dragStartDate!
+                                                : _dragEndDate!;
+                                            final e =
+                                                _dragEndDate!.isAfter(
+                                                  _dragStartDate!,
+                                                )
+                                                ? _dragEndDate!
+                                                : _dragStartDate!;
+                                            final dNorm = DateTime(
+                                              date.year,
+                                              date.month,
+                                              date.day,
+                                            );
+                                            final sNorm = DateTime(
+                                              s.year,
+                                              s.month,
+                                              s.day,
+                                            );
+                                            final eNorm = DateTime(
+                                              e.year,
+                                              e.month,
+                                              e.day,
+                                            );
+                                            isInDragRange =
+                                                !dNorm.isBefore(sNorm) &&
+                                                !dNorm.isAfter(eNorm);
+                                          }
+
+                                          final dayTasks = _getTasksForDate(
+                                            date,
+                                          );
+                                          final borderColor = isDark
+                                              ? Colors.grey[800]!
+                                              : Colors.grey[300]!;
+
+                                          return InkWell(
+                                            onTap: () {
+                                              setState(() {
+                                                _selectedDate = date;
+                                                if (!isCurrentMonth) {
+                                                  _currentMonth = DateTime(
+                                                    date.year,
+                                                    date.month,
+                                                    1,
+                                                  );
+                                                }
+                                              });
+                                            },
+                                            borderRadius: BorderRadius.circular(
+                                              2,
+                                            ),
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: isInDragRange
+                                                    ? colorScheme.primary
+                                                          .withValues(
+                                                            alpha: 0.3,
+                                                          )
+                                                    : Colors.transparent,
+                                                border: Border(
+                                                  right: BorderSide(
+                                                    color: (index % 7 != 6)
+                                                        ? borderColor
+                                                        : Colors.transparent,
+                                                    width: 0.5,
+                                                  ),
+                                                  bottom: BorderSide(
+                                                    color:
+                                                        (index <
+                                                            gridDays.length - 7)
+                                                        ? borderColor
+                                                        : Colors.transparent,
+                                                    width: 0.5,
                                                   ),
                                                 ),
                                               ),
-                                              const SizedBox(height: 2),
-                                              Expanded(
-                                                child: ListView(
-                                                  physics:
-                                                      const NeverScrollableScrollPhysics(),
-                                                  padding: EdgeInsets.zero,
-                                                  children: dayTasks.take(3).map((
-                                                    task,
-                                                  ) {
-                                                    final start =
-                                                        task.startDate ??
-                                                        task.dueDate ??
-                                                        date;
-                                                    final end =
-                                                        task.dueDate ??
-                                                        task.startDate ??
-                                                        date;
-
-                                                    final dNorm = DateTime(
-                                                      date.year,
-                                                      date.month,
-                                                      date.day,
-                                                    );
-                                                    final sNorm = DateTime(
-                                                      start.year,
-                                                      start.month,
-                                                      start.day,
-                                                    );
-                                                    final eNorm = DateTime(
-                                                      end.year,
-                                                      end.month,
-                                                      end.day,
-                                                    );
-
-                                                    final bool isStart = dNorm
-                                                        .atSameDayAs(sNorm);
-                                                    final bool isEnd = dNorm
-                                                        .atSameDayAs(eNorm);
-
-                                                    // 日付をまたぐ帯の連続性: 各日の各行でのスロット（タスクの並び順）を固定するための処理
-                                                    // 曜日ごとのマージンや隙間をなくし、隣のセルと完全に結合させる
-                                                    final bool isWeekStart =
-                                                        date.weekday % 7 ==
-                                                        0; // 日曜日
-                                                    final bool isWeekEnd =
-                                                        date.weekday % 7 ==
-                                                        6; // 土曜日
-
-                                                    // タスクの開始日または日曜日の場合に左側を丸める
-                                                    final bool shouldRoundLeft =
-                                                        isStart || isWeekStart;
-                                                    // タスクの終了日または土曜日の場合に右側を丸める
-                                                    final bool
-                                                    shouldRoundRight =
-                                                        isEnd || isWeekEnd;
-
-                                                    final borderRadius =
-                                                        BorderRadius.horizontal(
-                                                          left: shouldRoundLeft
-                                                              ? const Radius.circular(
-                                                                  4,
-                                                                )
-                                                              : Radius.zero,
-                                                          right:
-                                                              shouldRoundRight
-                                                              ? const Radius.circular(
-                                                                  4,
-                                                                )
-                                                              : Radius.zero,
-                                                        );
-
-                                                    // セル同士の隙間をなくすため、左右のパディングやマージンを結合用に調整
-                                                    final double leftMargin =
-                                                        (isWeekStart || isStart)
-                                                        ? 0.0
-                                                        : 0.0; // 負のマージンを削除して非負にする
-                                                    final double rightMargin =
-                                                        (isWeekEnd || isEnd)
-                                                        ? 0.0
-                                                        : 0.0;
-
-                                                    return Container(
-                                                      height: 18,
-                                                      margin: EdgeInsets.only(
-                                                        bottom: 2,
-                                                        left: leftMargin,
-                                                        right: rightMargin,
-                                                      ),
-                                                      padding: EdgeInsets.only(
-                                                        left:
-                                                            (isWeekStart ||
-                                                                isStart)
-                                                            ? 4
-                                                            : 2,
-                                                        right:
-                                                            (isWeekEnd || isEnd)
-                                                            ? 4
-                                                            : 2,
-                                                      ),
+                                              padding: const EdgeInsets.only(
+                                                top: 2,
+                                                left: 4,
+                                                right: 4,
+                                                bottom: 2,
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.stretch,
+                                                children: [
+                                                  Align(
+                                                    alignment:
+                                                        Alignment.topRight,
+                                                    child: Container(
+                                                      width: 22,
+                                                      height: 22,
                                                       decoration: BoxDecoration(
-                                                        color: task.isCompleted
-                                                            ? Colors.grey
-                                                                  .withValues(
-                                                                    alpha: 0.3,
-                                                                  )
-                                                            : colorScheme
-                                                                  .primary
-                                                                  .withValues(
-                                                                    alpha: 0.85,
-                                                                  ),
-                                                        borderRadius:
-                                                            borderRadius,
+                                                        color: isSelected
+                                                            ? colorScheme.primary
+                                                            : Colors.transparent,
+                                                        shape: BoxShape.circle,
+                                                        border: Border.all(
+                                                          color: isSelected
+                                                              ? colorScheme.primary
+                                                              : (isToday
+                                                                    ? colorScheme
+                                                                          .primary
+                                                                          .withValues(
+                                                                            alpha:
+                                                                                0.7,
+                                                                          )
+                                                                    : Colors
+                                                                          .transparent),
+                                                          width: isSelected
+                                                              ? 1.5
+                                                              : (isToday
+                                                                    ? 1.5
+                                                                    : 0),
+                                                        ),
                                                       ),
                                                       alignment:
-                                                          Alignment.centerLeft,
+                                                          Alignment.center,
                                                       child: Text(
-                                                        task.title.isEmpty
-                                                            ? '無題'
-                                                            : task.title,
+                                                        '${date.day}',
                                                         style: TextStyle(
-                                                          fontSize: 10,
-                                                          color: colorScheme
-                                                              .onPrimary,
-                                                          decoration:
-                                                              task.isCompleted
-                                                              ? TextDecoration
-                                                                    .lineThrough
-                                                              : null,
+                                                          fontSize: 11,
+                                                          fontWeight:
+                                                              isToday ||
+                                                                  isSelected ||
+                                                                  isInDragRange
+                                                              ? FontWeight.bold
+                                                              : FontWeight
+                                                                    .normal,
+                                                          color: isSelected
+                                                              ? colorScheme
+                                                                    .onPrimary
+                                                              : (isToday
+                                                                    ? colorScheme
+                                                                          .primary
+                                                                    : (!isCurrentMonth
+                                                                          ? (isDark
+                                                                                ? Colors.grey[700]
+                                                                                : Colors.grey[400])
+                                                                          : (date.weekday == 7
+                                                                                ? Colors.red[400]
+                                                                                : (date.weekday == 6 ? Colors.blue[400] : (isDark ? Colors.grey[300] : Colors.grey[750]))))),
                                                         ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
                                                       ),
-                                                    );
-                                                  }).toList(),
-                                                ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Expanded(
+                                                    child: ListView(
+                                                      physics:
+                                                          const NeverScrollableScrollPhysics(),
+                                                      padding: EdgeInsets.zero,
+                                                      children: dayTasks.take(3).map((
+                                                        task,
+                                                      ) {
+                                                        final start =
+                                                            task.startDate ??
+                                                            task.dueDate ??
+                                                            date;
+                                                        final end =
+                                                            task.dueDate ??
+                                                            task.startDate ??
+                                                            date;
+
+                                                        final dNorm = DateTime(
+                                                          date.year,
+                                                          date.month,
+                                                          date.day,
+                                                        );
+                                                        final sNorm = DateTime(
+                                                          start.year,
+                                                          start.month,
+                                                          start.day,
+                                                        );
+                                                        final eNorm = DateTime(
+                                                          end.year,
+                                                          end.month,
+                                                          end.day,
+                                                        );
+
+                                                        final bool isStart =
+                                                            dNorm.atSameDayAs(
+                                                              sNorm,
+                                                            );
+                                                        final bool isEnd = dNorm
+                                                            .atSameDayAs(eNorm);
+                                                        final bool isWeekStart =
+                                                            date.weekday % 7 ==
+                                                            0;
+                                                        final bool isWeekEnd =
+                                                            date.weekday % 7 ==
+                                                            6;
+                                                        final bool
+                                                        shouldRoundLeft =
+                                                            isStart ||
+                                                            isWeekStart;
+                                                        final bool
+                                                        shouldRoundRight =
+                                                            isEnd || isWeekEnd;
+
+                                                        final borderRadius =
+                                                            BorderRadius.horizontal(
+                                                              left:
+                                                                  shouldRoundLeft
+                                                                  ? const Radius.circular(
+                                                                      4,
+                                                                    )
+                                                                  : Radius.zero,
+                                                              right:
+                                                                  shouldRoundRight
+                                                                  ? const Radius.circular(
+                                                                      4,
+                                                                    )
+                                                                  : Radius.zero,
+                                                            );
+
+                                                        return Container(
+                                                          height: 18,
+                                                          margin:
+                                                              const EdgeInsets.only(
+                                                                bottom: 2,
+                                                              ),
+                                                          padding: EdgeInsets.only(
+                                                            left:
+                                                                (isWeekStart ||
+                                                                    isStart)
+                                                                ? 4
+                                                                : 2,
+                                                            right:
+                                                                (isWeekEnd ||
+                                                                    isEnd)
+                                                                ? 4
+                                                                : 2,
+                                                          ),
+                                                          decoration: BoxDecoration(
+                                                            color:
+                                                                task.isCompleted
+                                                                ? Colors.grey
+                                                                      .withValues(
+                                                                        alpha:
+                                                                            0.3,
+                                                                      )
+                                                                : colorScheme
+                                                                      .primary
+                                                                      .withValues(
+                                                                        alpha:
+                                                                            0.85,
+                                                                      ),
+                                                            borderRadius:
+                                                                borderRadius,
+                                                          ),
+                                                          alignment: Alignment
+                                                              .centerLeft,
+                                                          child: Text(
+                                                            task.title.isEmpty
+                                                                ? '無題'
+                                                                : task.title,
+                                                            style: TextStyle(
+                                                              fontSize: 10,
+                                                              color: colorScheme
+                                                                  .onPrimary,
+                                                              decoration:
+                                                                  task.isCompleted
+                                                                  ? TextDecoration
+                                                                        .lineThrough
+                                                                  : null,
+                                                            ),
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
+                                                        );
+                                                      }).toList(),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    },
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      const SizedBox(height: 12),
-
-                      if (selectedDateTasks.isEmpty)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.grey[900] : Colors.grey[100],
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isDark
-                                  ? Colors.grey[800]!
-                                  : Colors.grey[300]!,
                             ),
                           ),
-                          child: Center(
-                            child: Text(
-                              'この日のタスクはありません',
-                              style: TextStyle(
+                          const SizedBox(height: 24),
+                          if (selectedDateTasks.isEmpty)
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
                                 color: isDark
-                                    ? Colors.grey[400]
-                                    : Colors.grey[600],
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        )
-                      else
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: selectedDateTasks.length,
-                          itemBuilder: (context, index) {
-                            final task = selectedDateTasks[index];
-                            final rangeStr =
-                                (task.startDate != null &&
-                                    task.dueDate != null &&
-                                    task.startDate != task.dueDate)
-                                ? '${task.startDate!.month}/${task.startDate!.day} 〜 ${task.dueDate!.month}/${task.dueDate!.day}'
-                                : null;
-
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                side: BorderSide(
+                                    ? Colors.grey[900]
+                                    : Colors.grey[100],
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
                                   color: isDark
                                       ? Colors.grey[800]!
                                       : Colors.grey[300]!,
                                 ),
                               ),
-                              child: ListTile(
-                                leading: Checkbox(
-                                  value: task.isCompleted,
-                                  shape: const CircleBorder(),
-                                  onChanged: (val) {
-                                    _toggleTaskCompletion(task);
-                                  },
-                                ),
-                                title: Text(
-                                  task.title.isEmpty ? '(無題)' : task.title,
+                              child: Center(
+                                child: Text(
+                                  'この日のタスクはありません',
                                   style: TextStyle(
-                                    decoration: task.isCompleted
-                                        ? TextDecoration.lineThrough
-                                        : null,
-                                    color: task.isCompleted
-                                        ? Colors.grey
-                                        : null,
+                                    color: isDark
+                                        ? Colors.grey[400]
+                                        : Colors.grey[600],
+                                    fontSize: 13,
                                   ),
-                                ),
-                                subtitle: rangeStr != null
-                                    ? Text(
-                                        rangeStr,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: isDark
-                                              ? Colors.grey[400]
-                                              : Colors.grey[600],
-                                        ),
-                                      )
-                                    : null,
-                                trailing: IconButton(
-                                  icon: const Icon(
-                                    Icons.close,
-                                    size: 18,
-                                    color: Colors.grey,
-                                  ),
-                                  onPressed: () => _deleteTask(task),
-                                  tooltip: '削除',
                                 ),
                               ),
-                            );
-                          },
-                        ),
-                      const SizedBox(height: 40),
-                    ],
+                            )
+                          else
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: selectedDateTasks.length,
+                              itemBuilder: (context, index) {
+                                final task = selectedDateTasks[index];
+                                final rangeStr =
+                                    (task.startDate != null &&
+                                        task.dueDate != null &&
+                                        task.startDate != task.dueDate)
+                                    ? '${task.startDate!.month}/${task.startDate!.day} 〜 ${task.dueDate!.month}/${task.dueDate!.day}'
+                                    : null;
+
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    side: BorderSide(
+                                      color: isDark
+                                          ? Colors.grey[800]!
+                                          : Colors.grey[300]!,
+                                    ),
+                                  ),
+                                  child: ListTile(
+                                    leading: Checkbox(
+                                      value: task.isCompleted,
+                                      shape: const CircleBorder(),
+                                      onChanged: (val) {
+                                        _toggleTaskCompletion(task);
+                                      },
+                                    ),
+                                    title: Text(
+                                      task.title.isEmpty ? '(無題)' : task.title,
+                                      style: TextStyle(
+                                        decoration: task.isCompleted
+                                            ? TextDecoration.lineThrough
+                                            : null,
+                                        color: task.isCompleted
+                                            ? Colors.grey
+                                            : null,
+                                      ),
+                                    ),
+                                    subtitle: rangeStr != null
+                                        ? Text(
+                                            rangeStr,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: isDark
+                                                  ? Colors.grey[400]
+                                                  : Colors.grey[600],
+                                            ),
+                                          )
+                                        : null,
+                                    trailing: IconButton(
+                                      icon: const Icon(
+                                        Icons.close,
+                                        size: 18,
+                                        color: Colors.grey,
+                                      ),
+                                      onPressed: () => _deleteTask(task),
+                                      tooltip: '削除',
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          const SizedBox(height: 40),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+      ),
     );
   }
 
