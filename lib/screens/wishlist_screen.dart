@@ -10,6 +10,7 @@ class WishlistScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
+        titleSpacing: 24,
         elevation: 0,
         title: Text(
           '欲しいもの',

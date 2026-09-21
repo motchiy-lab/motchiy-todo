@@ -57,6 +57,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
+        titleSpacing: 24,
         elevation: 0,
         title: Text(
           '設定',

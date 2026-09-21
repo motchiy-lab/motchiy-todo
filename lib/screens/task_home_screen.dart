@@ -459,7 +459,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        titleSpacing: 16,
+        titleSpacing: 24,
         title: Text(
           'ToDoリスト',
           style: TextStyle(

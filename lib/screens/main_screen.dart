@@ -21,8 +21,8 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int? _currentIndex = 2; // ToDoリスト is the 3rd tab (index 2)
+  int _transitionDirection = 1;
   final GlobalKey<TaskHomeScreenState> _taskHomeScreenKey = GlobalKey();
-  late final PageController _pageController;
 
   late final List<Widget> _screens = [
     const CalendarScreen(),
@@ -39,27 +39,12 @@ class _MainScreenState extends State<MainScreen> {
     const SettingsScreen(),
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController(initialPage: _currentIndex!);
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
   void _onTabTapped(int index) {
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOutCubic,
-    );
-  }
+    if (_currentIndex == index) {
+      return;
+    }
 
-  void _onPageChanged(int index) {
+    _transitionDirection = index >= (_currentIndex ?? 0) ? 1 : -1;
     setState(() {
       _currentIndex = index;
     });
@@ -90,10 +75,39 @@ class _MainScreenState extends State<MainScreen> {
                       ),
                     ),
                   )
-                : PageView(
-                    controller: _pageController,
-                    onPageChanged: _onPageChanged,
-                    children: _screens,
+                : AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    layoutBuilder: (currentChild, previousChildren) {
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: <Widget>[...previousChildren, ?currentChild],
+                      );
+                    },
+                    transitionBuilder: (child, animation) {
+                      return AnimatedBuilder(
+                        animation: animation,
+                        child: child,
+                        builder: (context, child) {
+                          final isExiting =
+                              animation.status == AnimationStatus.reverse;
+                          final progress = 1 - animation.value;
+                          final offset =
+                              _transitionDirection *
+                              (isExiting ? -progress : progress);
+
+                          return FractionalTranslation(
+                            translation: Offset(offset, 0),
+                            child: child,
+                          );
+                        },
+                      );
+                    },
+                    child: KeyedSubtree(
+                      key: ValueKey(_currentIndex),
+                      child: _screens[_currentIndex!],
+                    ),
                   ),
           ),
         ],

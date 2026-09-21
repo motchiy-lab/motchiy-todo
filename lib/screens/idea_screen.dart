@@ -10,6 +10,7 @@ class IdeaScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
+        titleSpacing: 24,
         elevation: 0,
         title: Text(
           'アイデア',
