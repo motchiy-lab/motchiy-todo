@@ -88,6 +88,13 @@ class _SignInScreenState extends State<SignInScreen> {
   String? _error;
 
   Future<void> _signIn() async {
+    if (!AuthService.isGoogleSignInSupported) {
+      setState(() {
+        _error = 'Windows版ではGoogleログインを利用できません。Web版またはモバイル版をご利用ください。';
+      });
+      return;
+    }
+
     setState(() {
       _isSigningIn = true;
       _error = null;
@@ -124,9 +131,18 @@ class _SignInScreenState extends State<SignInScreen> {
                 const Text('Googleアカウントでログインして、タスクと設定を同期します。'),
                 const SizedBox(height: 28),
                 FilledButton.icon(
-                  onPressed: _isSigningIn ? null : _signIn,
+                  onPressed:
+                      _isSigningIn || !AuthService.isGoogleSignInSupported
+                      ? null
+                      : _signIn,
                   icon: const Icon(Icons.login),
-                  label: Text(_isSigningIn ? 'ログイン中...' : 'Googleでログイン'),
+                  label: Text(
+                    !AuthService.isGoogleSignInSupported
+                        ? 'この環境では利用できません'
+                        : _isSigningIn
+                        ? 'ログイン中...'
+                        : 'Googleでログイン',
+                  ),
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 16),

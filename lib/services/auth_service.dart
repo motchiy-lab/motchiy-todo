@@ -1,16 +1,64 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import 'google_desktop_oauth_stub.dart'
+    if (dart.library.io) 'google_desktop_oauth_io.dart';
+
 class AuthService {
+  static const _desktopClientId = String.fromEnvironment(
+    'GOOGLE_DESKTOP_CLIENT_ID',
+  );
+  static const _desktopClientSecret = String.fromEnvironment(
+    'GOOGLE_DESKTOP_CLIENT_SECRET',
+  );
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
+
+  static bool get isGoogleSignInSupported =>
+      kIsWeb ||
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.windows;
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
   User? get currentUser => _auth.currentUser;
 
   Future<UserCredential> signInWithGoogle() async {
+    if (!isGoogleSignInSupported) {
+      throw UnsupportedError('このプラットフォームではGoogleログインを利用できません。');
+    }
+
     try {
+      if (defaultTargetPlatform == TargetPlatform.windows) {
+        if (_desktopClientId.isEmpty) {
+          throw StateError(
+            'Windows版Googleログインの設定がありません。'
+            'GOOGLE_DESKTOP_CLIENT_IDを指定して起動してください。',
+          );
+        }
+        if (_desktopClientSecret.isEmpty) {
+          throw StateError(
+            'このWindowsアプリはGoogle OAuthシークレットなしでビルドされています。'
+            'flutter runまたはflutter build windowsに'
+            '--dart-define=GOOGLE_DESKTOP_CLIENT_SECRET=<secret>を指定して'
+            '再ビルドしてください。',
+          );
+        }
+        final tokens = await GoogleDesktopOAuth.authenticate(
+          _desktopClientId,
+          _desktopClientSecret,
+        );
+        return await _auth.signInWithCredential(
+          GoogleAuthProvider.credential(
+            idToken: tokens['id_token'],
+            accessToken: tokens['access_token'],
+          ),
+        );
+      }
+
       final account = await _googleSignIn.signIn();
       if (account == null) {
         throw StateError('Googleログインがキャンセルされました');
@@ -34,6 +82,10 @@ class AuthService {
   }
 
   Future<void> signOut() async {
-    await Future.wait([_auth.signOut(), _googleSignIn.signOut()]);
+    await _auth.signOut();
+    if (defaultTargetPlatform != TargetPlatform.windows &&
+        isGoogleSignInSupported) {
+      await _googleSignIn.signOut();
+    }
   }
 }
