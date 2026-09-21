@@ -74,7 +74,7 @@ class NavItem extends StatelessWidget {
                   if (showLabel) ...[
                     const SizedBox(height: 6),
                     SizedBox(
-                      height: 12,
+                      height: 16,
                       child: Center(
                         child: Text(
                           label,
