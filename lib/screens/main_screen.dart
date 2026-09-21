@@ -45,6 +45,19 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
 
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity;
+    if (velocity == null || _currentIndex == null || velocity.abs() < 300) {
+      return;
+    }
+
+    // A right swipe moves to the tab on the left; a left swipe moves right.
+    final nextIndex = velocity > 0 ? _currentIndex! - 1 : _currentIndex! + 1;
+    if (nextIndex >= 0 && nextIndex < 5) {
+      _onTabTapped(nextIndex);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -57,50 +70,56 @@ class _MainScreenState extends State<MainScreen> {
               (Platform.isWindows || Platform.isMacOS || Platform.isLinux))
             const CustomTitleBar(),
           Expanded(
-            child: _currentIndex == null
-                ? Center(
-                    child: Text(
-                      'ToDoリストを閉じました',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 16,
+            child: GestureDetector(
+              onHorizontalDragEnd: _onHorizontalDragEnd,
+              child: _currentIndex == null
+                  ? Center(
+                      child: Text(
+                        'ToDoリストを閉じました',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 16,
+                        ),
+                      ),
+                    )
+                  : AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      layoutBuilder: (currentChild, previousChildren) {
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: <Widget>[
+                            ...previousChildren,
+                            ?currentChild,
+                          ],
+                        );
+                      },
+                      transitionBuilder: (child, animation) {
+                        return AnimatedBuilder(
+                          animation: animation,
+                          child: child,
+                          builder: (context, child) {
+                            final isExiting =
+                                animation.status == AnimationStatus.reverse;
+                            final progress = 1 - animation.value;
+                            final offset =
+                                _transitionDirection *
+                                (isExiting ? -progress : progress);
+
+                            return FractionalTranslation(
+                              translation: Offset(offset, 0),
+                              child: child,
+                            );
+                          },
+                        );
+                      },
+                      child: KeyedSubtree(
+                        key: ValueKey(_currentIndex),
+                        child: _buildScreen(_currentIndex!),
                       ),
                     ),
-                  )
-                : AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    switchInCurve: Curves.easeOutCubic,
-                    switchOutCurve: Curves.easeInCubic,
-                    layoutBuilder: (currentChild, previousChildren) {
-                      return Stack(
-                        fit: StackFit.expand,
-                        children: <Widget>[...previousChildren, ?currentChild],
-                      );
-                    },
-                    transitionBuilder: (child, animation) {
-                      return AnimatedBuilder(
-                        animation: animation,
-                        child: child,
-                        builder: (context, child) {
-                          final isExiting =
-                              animation.status == AnimationStatus.reverse;
-                          final progress = 1 - animation.value;
-                          final offset =
-                              _transitionDirection *
-                              (isExiting ? -progress : progress);
-
-                          return FractionalTranslation(
-                            translation: Offset(offset, 0),
-                            child: child,
-                          );
-                        },
-                      );
-                    },
-                    child: KeyedSubtree(
-                      key: ValueKey(_currentIndex),
-                      child: _buildScreen(_currentIndex!),
-                    ),
-                  ),
+            ),
           ),
         ],
       ),
