@@ -6,6 +6,7 @@ class NavItem extends StatefulWidget {
   final IconData filledIcon;
   final String label;
   final int currentIndex;
+  final Color? selectedColor;
   final ValueChanged<int> onTap;
 
   const NavItem({
@@ -15,6 +16,7 @@ class NavItem extends StatefulWidget {
     required this.filledIcon,
     required this.label,
     required this.currentIndex,
+    this.selectedColor,
     required this.onTap,
   });
 
@@ -29,7 +31,9 @@ class _NavItemState extends State<NavItem> {
   Widget build(BuildContext context) {
     final isSelected = widget.currentIndex == widget.index;
     final colorScheme = Theme.of(context).colorScheme;
-    final color = isSelected ? colorScheme.primary : Colors.grey;
+    final color = isSelected
+        ? (widget.selectedColor ?? colorScheme.primary)
+        : Colors.grey;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
