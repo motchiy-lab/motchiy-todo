@@ -22,6 +22,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
   bool _isLoading = true;
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, FocusNode> _focusNodes = {};
+  Future<void> _saveQueue = Future<void>.value();
 
   CollectionReference<Map<String, dynamic>> get _taskCollection =>
       FirebaseFirestore.instance
@@ -86,7 +87,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
   Future<void> _loadTasks() async {
     try {
       final snapshot = await _taskCollection.get();
-      if (snapshot.docs.isNotEmpty) {
+      if (snapshot.docs.isNotEmpty && !snapshot.metadata.isFromCache) {
         setState(() {
           _tasks = snapshot.docs.map((doc) {
             final data = doc.data();
@@ -142,24 +143,37 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
     }
   }
 
-  Future<void> _saveTasks() async {
-    // ローカルにも保存
-    final prefs = await SharedPreferences.getInstance();
-    final String encoded = jsonEncode(_tasks.map((t) => t.toJson()).toList());
-    await prefs.setString('tasks_key', encoded);
+  Future<void> _saveTasks({String? deletedTaskId}) async {
+    final tasks = List<Task>.of(_tasks);
 
-    // Firestoreに保存
-    try {
-      final batch = FirebaseFirestore.instance.batch();
-      // 既存のドキュメントを一旦クリアするか、各タスクをアップサートする
-      for (var task in _tasks) {
-        final ref = _taskCollection.doc(task.id);
-        batch.set(ref, task.toJson());
+    Future<void> writeTasks() async {
+      // ローカルにも保存
+      final encoded = jsonEncode(tasks.map((t) => t.toJson()).toList());
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('tasks_key', encoded);
+
+      // Firestoreに保存
+      try {
+        final batch = FirebaseFirestore.instance.batch();
+        for (final task in tasks) {
+          final ref = _taskCollection.doc(task.id);
+          batch.set(ref, task.toJson());
+        }
+        if (deletedTaskId != null) {
+          batch.delete(_taskCollection.doc(deletedTaskId));
+        }
+        await batch.commit();
+      } catch (_) {
+        // オフライン時はローカル保存を維持し、次回オンライン時に再試行する。
       }
-      await batch.commit();
-    } catch (e) {
-      // オフライン時のエラーなどは無視（次回オンライン時に同期またはローカル継続）
     }
+
+    // 入力中の連続保存が逆順で完了して古い内容を上書きしないよう直列化する。
+    _saveQueue = _saveQueue.then<void>(
+      (_) => writeTasks(),
+      onError: (_, _) => writeTasks(),
+    );
+    await _saveQueue;
   }
 
   void _insertTaskBelow(Task currentTask) {
@@ -278,7 +292,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
       _controllers.remove(task.id)?.dispose();
       _focusNodes.remove(task.id)?.dispose();
     });
-    _saveTasks();
+    _saveTasks(deletedTaskId: task.id);
 
     if (_tasks.isEmpty) {
       _addTaskAtEnd();

@@ -22,22 +22,17 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int? _currentIndex = 2; // ToDoリスト is the 3rd tab (index 2)
   int _transitionDirection = 1;
-  final GlobalKey<TaskHomeScreenState> _taskHomeScreenKey = GlobalKey();
 
-  late final List<Widget> _screens = [
-    const CalendarScreen(),
-    const WishlistScreen(),
-    TaskHomeScreen(
-      key: _taskHomeScreenKey,
-      onBack: () {
-        setState(() {
-          _currentIndex = null;
-        });
-      },
-    ),
-    const IdeaScreen(),
-    const SettingsScreen(),
-  ];
+  Widget _buildScreen(int index) {
+    return switch (index) {
+      0 => const CalendarScreen(),
+      1 => const WishlistScreen(),
+      2 => const TaskHomeScreen(),
+      3 => const IdeaScreen(),
+      4 => const SettingsScreen(),
+      _ => const SizedBox.shrink(),
+    };
+  }
 
   void _onTabTapped(int index) {
     if (_currentIndex == index) {
@@ -48,9 +43,6 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       _currentIndex = index;
     });
-    if (index == 2) {
-      _taskHomeScreenKey.currentState?.loadTasks();
-    }
   }
 
   @override
@@ -106,7 +98,7 @@ class _MainScreenState extends State<MainScreen> {
                     },
                     child: KeyedSubtree(
                       key: ValueKey(_currentIndex),
-                      child: _screens[_currentIndex!],
+                      child: _buildScreen(_currentIndex!),
                     ),
                   ),
           ),
