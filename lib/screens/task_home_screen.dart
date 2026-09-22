@@ -239,6 +239,16 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
     return !start.isAfter(today);
   }
 
+  bool _isTaskExpired(Task task) {
+    if (task.isCompleted) return false;
+    final end = task.dueDate ?? task.startDate;
+    if (end == null) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final endDate = DateTime(end.year, end.month, end.day);
+    return endDate.isBefore(today);
+  }
+
   List<Task> _getCompletedTasks() {
     final completed = _tasks.where((t) => t.isCompleted).toList();
     completed.sort(
@@ -466,8 +476,9 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final uncompletedTasks = _tasks
-        .where((t) => !t.isCompleted && _isTaskActive(t))
+        .where((t) => !t.isCompleted && _isTaskActive(t) && !_isTaskExpired(t))
         .toList();
+    final expiredTasks = _tasks.where((t) => _isTaskExpired(t)).toList();
     final completedTasks = _getCompletedTasks();
 
     return Scaffold(
@@ -505,6 +516,22 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
                             ...uncompletedTasks.map(
                               (task) => _buildTaskRow(task),
                             ),
+                            if (expiredTasks.isNotEmpty) ...[
+                              const Padding(
+                                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                                child: Text(
+                                  '期限切れ',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                              ),
+                              ...expiredTasks.map(
+                                (task) => _buildTaskRow(task),
+                              ),
+                            ],
                             if (completedTasks.isNotEmpty) ...[
                               const Padding(
                                 padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
