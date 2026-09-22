@@ -17,10 +17,10 @@ class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
 
   @override
-  State<CalendarScreen> createState() => _CalendarScreenState();
+  State<CalendarScreen> createState() => CalendarScreenState();
 }
 
-class _CalendarScreenState extends State<CalendarScreen> {
+class CalendarScreenState extends State<CalendarScreen> {
   List<Task> _tasks = [];
   bool _isLoading = true;
   bool _showHint = true;
@@ -86,6 +86,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
       _isLoading = false;
     });
   }
+
+  Future<void> loadTasks() => _loadTasks();
 
   Future<void> _saveTasks() async {
     final prefs = await SharedPreferences.getInstance();

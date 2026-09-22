@@ -22,14 +22,16 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int? _currentIndex = 2; // ToDoリスト is the 3rd tab (index 2)
   late final List<Widget> _screens;
+  final _calendarKey = GlobalKey<CalendarScreenState>();
+  final _taskHomeKey = GlobalKey<TaskHomeScreenState>();
 
   @override
   void initState() {
     super.initState();
     _screens = [
-      const CalendarScreen(),
+      CalendarScreen(key: _calendarKey),
       const WishlistScreen(),
-      const TaskHomeScreen(),
+      TaskHomeScreen(key: _taskHomeKey),
       const IdeaScreen(),
       const SettingsScreen(),
     ];
@@ -43,6 +45,11 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       _currentIndex = index;
     });
+    if (index == 0) {
+      _calendarKey.currentState?.loadTasks();
+    } else if (index == 2) {
+      _taskHomeKey.currentState?.loadTasks();
+    }
   }
 
   void _onHorizontalDragEnd(DragEndDetails details) {
