@@ -33,6 +33,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime? _dragEndDate;
   bool _isDragging = false;
 
+  CollectionReference<Map<String, dynamic>> get _taskCollection =>
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(FirebaseAuth.instance.currentUser!.uid)
+          .collection('tasks');
+
   @override
   void initState() {
     super.initState();
@@ -85,6 +91,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final prefs = await SharedPreferences.getInstance();
     final String encoded = jsonEncode(_tasks.map((t) => t.toJson()).toList());
     await prefs.setString('tasks_key', encoded);
+
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final task in _tasks) {
+        batch.set(_taskCollection.doc(task.id), task.toJson());
+      }
+      await batch.commit();
+    } catch (_) {
+      // Keep the local copy when offline; it will be available as a fallback.
+    }
   }
 
   void _previousMonth() {
@@ -613,12 +629,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                       height: 22,
                                                       decoration: BoxDecoration(
                                                         color: isSelected
-                                                            ? colorScheme.primary
-                                                            : Colors.transparent,
+                                                            ? colorScheme
+                                                                  .primary
+                                                            : Colors
+                                                                  .transparent,
                                                         shape: BoxShape.circle,
                                                         border: Border.all(
                                                           color: isSelected
-                                                              ? colorScheme.primary
+                                                              ? colorScheme
+                                                                    .primary
                                                               : (isToday
                                                                     ? colorScheme
                                                                           .primary

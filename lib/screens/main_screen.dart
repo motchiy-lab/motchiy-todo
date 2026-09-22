@@ -21,17 +21,18 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int? _currentIndex = 2; // ToDoリスト is the 3rd tab (index 2)
-  int _transitionDirection = 1;
+  late final List<Widget> _screens;
 
-  Widget _buildScreen(int index) {
-    return switch (index) {
-      0 => const CalendarScreen(),
-      1 => const WishlistScreen(),
-      2 => const TaskHomeScreen(),
-      3 => const IdeaScreen(),
-      4 => const SettingsScreen(),
-      _ => const SizedBox.shrink(),
-    };
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      const CalendarScreen(),
+      const WishlistScreen(),
+      const TaskHomeScreen(),
+      const IdeaScreen(),
+      const SettingsScreen(),
+    ];
   }
 
   void _onTabTapped(int index) {
@@ -39,7 +40,6 @@ class _MainScreenState extends State<MainScreen> {
       return;
     }
 
-    _transitionDirection = index >= (_currentIndex ?? 0) ? 1 : -1;
     setState(() {
       _currentIndex = index;
     });
@@ -82,43 +82,7 @@ class _MainScreenState extends State<MainScreen> {
                         ),
                       ),
                     )
-                  : AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      layoutBuilder: (currentChild, previousChildren) {
-                        return Stack(
-                          fit: StackFit.expand,
-                          children: <Widget>[
-                            ...previousChildren,
-                            ?currentChild,
-                          ],
-                        );
-                      },
-                      transitionBuilder: (child, animation) {
-                        return AnimatedBuilder(
-                          animation: animation,
-                          child: child,
-                          builder: (context, child) {
-                            final isExiting =
-                                animation.status == AnimationStatus.reverse;
-                            final progress = 1 - animation.value;
-                            final offset =
-                                _transitionDirection *
-                                (isExiting ? -progress : progress);
-
-                            return FractionalTranslation(
-                              translation: Offset(offset, 0),
-                              child: child,
-                            );
-                          },
-                        );
-                      },
-                      child: KeyedSubtree(
-                        key: ValueKey(_currentIndex),
-                        child: _buildScreen(_currentIndex!),
-                      ),
-                    ),
+                  : IndexedStack(index: _currentIndex, children: _screens),
             ),
           ),
         ],
