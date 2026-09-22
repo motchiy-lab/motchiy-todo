@@ -413,6 +413,22 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
                     ),
                   ),
                 ),
+                AnimatedBuilder(
+                  animation: focusNode,
+                  builder: (context, child) {
+                    return AnimatedOpacity(
+                      opacity: focusNode.hasFocus ? 1 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      child: child,
+                    );
+                  },
+                  child: Container(
+                    height: 2,
+                    width: double.infinity,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
                 if (task.dueDate != null || task.startDate != null) ...[
                   Padding(
                     padding: EdgeInsets.zero,
