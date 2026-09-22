@@ -1,7 +1,3 @@
-# motchiy_todo
-
-A new Flutter project.
-
 ## Googleログインの対応プラットフォーム
 
 Windows版はGoogleのデスクトップOAuth（PKCE）を使って既定のブラウザで認証します。
