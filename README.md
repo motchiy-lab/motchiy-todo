@@ -17,9 +17,13 @@ Flutterで作成したタスク管理アプリです。Windows、Android、Linux
 
 ### Windows
 
-MSIXはWindows 10/11向けです。発行元が信頼されていないという警告が表示される
-場合があります。配布用MSIXには、発行者証明書による署名と、利用者側での証明書の
-信頼設定が必要です。
+MSIXはWindows 10/11向けです。`tool\build_all.ps1` は初回ビルド時に開発用の
+自己署名証明書を現在のユーザーの証明書ストアへ作成し、MSIXへ署名します。
+成果物には公開証明書 `motchiy-todo-publisher.cer` も出力されるため、インストール
+する各Windows端末でこのファイルを「現在のユーザー > 信頼されたルート証明機関」に
+インポートしてからMSIXをインストールしてください。証明書を更新する場合は、
+`-CertificateThumbprint <拇印>` で既存の秘密鍵付き証明書を指定できます。
+署名を省略する場合だけ `-SkipMsixSigning` を指定します。
 
 ### Android
 

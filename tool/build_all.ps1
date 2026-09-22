@@ -7,6 +7,10 @@ param(
 
     [string]$Version,
 
+    [string]$CertificateThumbprint,
+
+    [switch]$SkipMsixSigning,
+
     [switch]$SkipLinux,
 
     [Parameter(ValueFromRemainingArguments = $true)]
@@ -80,6 +84,94 @@ function Get-MakeAppx {
     }
 
     throw 'makeappx.exe was not found. Install the Windows 10/11 SDK to create the MSIX package.'
+}
+
+function Get-SignTool {
+    $command = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+
+    $kitsRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+    $candidate = Get-ChildItem $kitsRoot -Filter signtool.exe -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+        Sort-Object FullName -Descending |
+        Select-Object -First 1
+    if ($candidate) {
+        return $candidate.FullName
+    }
+
+    throw 'signtool.exe was not found. Install the Windows 10/11 SDK to sign the MSIX package.'
+}
+
+function Get-MsixCertificate {
+    param(
+        [string]$Thumbprint
+    )
+
+    $certificate = if ($Thumbprint) {
+        Get-ChildItem "Cert:\CurrentUser\My\$($Thumbprint.Replace(' ', ''))" -ErrorAction SilentlyContinue
+    }
+    else {
+        Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue |
+            Where-Object { $_.Subject -eq 'CN=Motchiy' -and $_.HasPrivateKey } |
+            Sort-Object NotAfter -Descending |
+            Select-Object -First 1
+    }
+
+    if ($certificate -and $certificate.Subject -eq 'CN=Motchiy' -and $certificate.HasPrivateKey) {
+        return $certificate
+    }
+
+    if ($Thumbprint) {
+        throw "Signing certificate was not found in Cert:\CurrentUser\My or has no private key: $Thumbprint"
+    }
+
+    Write-Host 'Creating a development MSIX signing certificate in the current user certificate store...'
+    $certificate = New-SelfSignedCertificate `
+        -Type Custom `
+        -Subject 'CN=Motchiy' `
+        -KeyUsage DigitalSignature `
+        -FriendlyName 'Motchiy Todo MSIX' `
+        -CertStoreLocation 'Cert:\CurrentUser\My'
+
+    $temporaryCertificate = Join-Path $env:TEMP "motchiy-todo-$($certificate.Thumbprint).cer"
+    try {
+        Export-Certificate -Cert $certificate -FilePath $temporaryCertificate -Force | Out-Null
+        & certutil.exe -user -addstore Root $temporaryCertificate | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not trust the generated signing certificate: certutil.exe exited with $LASTEXITCODE."
+        }
+    }
+    finally {
+        if (Test-Path $temporaryCertificate) {
+            Remove-Item $temporaryCertificate -Force
+        }
+    }
+
+    return $certificate
+}
+
+function Invoke-MsixSigning {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$MsixPath,
+        [Parameter(Mandatory = $true)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]$Certificate,
+        [Parameter(Mandatory = $true)]
+        [string]$OutputDirectory
+    )
+
+    $signTool = Get-SignTool
+    Invoke-Tool $signTool @(
+        'sign', '/fd', 'SHA256', '/sha1', $Certificate.Thumbprint,
+        '/tr', 'http://timestamp.digicert.com', '/td', 'SHA256', $MsixPath
+    )
+    Invoke-Tool $signTool @('verify', '/pa', '/v', $MsixPath)
+
+    Export-Certificate -Cert $Certificate -FilePath (Join-Path $OutputDirectory 'motchiy-todo-publisher.cer') -Force | Out-Null
+    Write-Host "MSIX signed with certificate $($Certificate.Thumbprint)."
+    Write-Host 'Trust motchiy-todo-publisher.cer on each installation machine before installing the MSIX.'
 }
 
 function New-MsixLogo {
@@ -218,6 +310,11 @@ try {
         $makeAppx = Get-MakeAppx
         $msixPath = Join-Path $outputPath "motchiy-todo-windows-$($buildVersion.Package).msix"
         Invoke-Tool $makeAppx @('pack', '/d', $msixStaging, '/p', $msixPath, '/o')
+
+        if (-not $SkipMsixSigning) {
+            $certificate = Get-MsixCertificate $CertificateThumbprint
+            Invoke-MsixSigning $msixPath $certificate $outputPath
+        }
     }
     finally {
         if (Test-Path $msixStaging) {
