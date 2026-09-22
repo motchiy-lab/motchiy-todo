@@ -28,7 +28,7 @@ class NavItem extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final highlightColor = selectedColor ?? colorScheme.onPrimary;
     final color = isSelected ? highlightColor : Colors.grey;
-    final indicatorSize = showLabel ? 74.0 : 68.0;
+    final indicatorSize = showLabel ? 68.0 : 68.0;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
