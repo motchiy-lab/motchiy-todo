@@ -17,6 +17,26 @@ Copy-Item config\google_oauth.json.example config\google_oauth.json
 .\tool\build_windows.ps1
 ```
 
+全プラットフォーム向けの成果物（MSIX、APK、LinuxのELF + `data/` を含む
+TAR.GZ、WebのZIP）は、リポジトリのルートで次の1コマンドで作成できます。
+
+```powershell
+.\tool\build_all.ps1
+```
+
+成果物は `dist/` に出力されます。WindowsでLinux版も作成する場合は、WSLに
+FlutterとLinuxデスクトップのビルド環境を用意してください。Linux版を省略する
+場合は `.\tool\build_all.ps1 -SkipLinux` を使えます。MSIXの作成にはWindows SDK
+の `makeappx.exe` が必要です。
+
+バージョンを指定する場合は `-Version` を使います。`1.2.3+4` の形式では、
+`1.2.3` がアプリバージョン、`4` がビルド番号になります。省略時は
+`pubspec.yaml` の `version` を使用します。
+
+```powershell
+.\tool\build_all.ps1 -Version 1.2.3+4
+```
+
 Google OAuthのリダイレクトURIは、アプリが起動時に使う
 `http://127.0.0.1:<空きポート>` です。デスクトップアプリ用クライアントでは
 ループバックリダイレクトを許可してください。クライアントシークレットは
