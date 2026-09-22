@@ -613,8 +613,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                               ),
                                               padding: const EdgeInsets.only(
                                                 top: 2,
-                                                left: 4,
-                                                right: 4,
                                                 bottom: 2,
                                               ),
                                               child: Column(
