@@ -30,6 +30,7 @@ class GoogleDesktopOAuth {
           'code_challenge': challenge,
           'code_challenge_method': 'S256',
           'access_type': 'offline',
+          // Always show the chooser so the user can change accounts.
           'prompt': 'select_account',
         },
       );
@@ -37,7 +38,10 @@ class GoogleDesktopOAuth {
         throw StateError('Googleログイン画面を開けませんでした。');
       }
 
-      final request = await server.first;
+      final request = await server.first.timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw StateError('Googleログインがキャンセルされました'),
+      );
       final code = request.uri.queryParameters['code'];
       final error = request.uri.queryParameters['error'];
       request.response

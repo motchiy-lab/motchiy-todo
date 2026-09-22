@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../main.dart';
+import '../services/auth_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -13,6 +14,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  bool _isAccountActionRunning = false;
+
   DocumentReference<Map<String, dynamic>> get _settingsDocument =>
       FirebaseFirestore.instance
           .collection('users')
@@ -49,6 +52,134 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {});
   }
 
+  Future<void> _switchAccount() async {
+    setState(() => _isAccountActionRunning = true);
+    try {
+      final authService = AuthService();
+      await authService.switchGoogleAccount();
+    } on StateError catch (error) {
+      if (error.message == 'Googleログインがキャンセルされました') {
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('アカウントを切り替えられませんでした: $error')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('アカウントを切り替えられませんでした: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _isAccountActionRunning = false);
+    }
+  }
+
+  Future<void> _signOut() async {
+    final shouldSignOut = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('ログアウトしますか？'),
+        content: const Text('次回利用時には、もう一度ログインが必要です。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('ログアウト'),
+          ),
+        ],
+      ),
+    );
+    if (shouldSignOut != true) return;
+    await AuthService().signOut();
+  }
+
+  Widget _buildAccountSection(ColorScheme colorScheme, bool isDark) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'アカウント管理',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'ログイン中のアカウントや、利用するアカウントを管理できます',
+          style: TextStyle(
+            fontSize: 12,
+            color: isDark ? Colors.grey[400] : Colors.grey[600],
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (currentUser != null)
+          Card(
+            margin: EdgeInsets.zero,
+            child: ListTile(
+              leading: _buildAccountAvatar(currentUser),
+              title: Text(currentUser.displayName ?? 'Googleアカウント'),
+              subtitle: Text(currentUser.email ?? ''),
+              trailing: const Icon(Icons.check_circle),
+            ),
+          ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed:
+                    _isAccountActionRunning ||
+                        !AuthService.isGoogleSignInSupported
+                    ? null
+                    : _switchAccount,
+                icon: _isAccountActionRunning
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.swap_horiz),
+                label: const Text('アカウントを変更'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _isAccountActionRunning ? null : _signOut,
+                icon: const Icon(Icons.logout),
+                label: const Text('ログアウト'),
+              ),
+            ),
+          ],
+        ),
+        if (!AuthService.isGoogleSignInSupported)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'この環境ではGoogleログインを利用できません。',
+              style: TextStyle(color: colorScheme.error, fontSize: 12),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAccountAvatar(User user) {
+    return CircleAvatar(
+      backgroundImage: user.photoURL == null
+          ? null
+          : NetworkImage(user.photoURL!),
+      child: user.photoURL == null
+          ? Text((user.email ?? '?').substring(0, 1).toUpperCase())
+          : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -75,6 +206,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
               children: [
                 const SizedBox(height: 8),
+                _buildAccountSection(colorScheme, isDark),
+                const SizedBox(height: 32),
                 const Text(
                   'カラーテーマ',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),

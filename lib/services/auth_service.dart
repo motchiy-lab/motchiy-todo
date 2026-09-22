@@ -26,7 +26,9 @@ class AuthService {
   Stream<User?> get authStateChanges => _auth.authStateChanges();
   User? get currentUser => _auth.currentUser;
 
-  Future<UserCredential> signInWithGoogle() async {
+  Future<UserCredential> signInWithGoogle({
+    bool forceAccountSelection = false,
+  }) async {
     if (!isGoogleSignInSupported) {
       throw UnsupportedError('このプラットフォームではGoogleログインを利用できません。');
     }
@@ -59,6 +61,9 @@ class AuthService {
         );
       }
 
+      if (forceAccountSelection) {
+        await _googleSignIn.signOut();
+      }
       final account = await _googleSignIn.signIn();
       if (account == null) {
         throw StateError('Googleログインがキャンセルされました');
@@ -79,6 +84,10 @@ class AuthService {
       }
       rethrow;
     }
+  }
+
+  Future<UserCredential> switchGoogleAccount() {
+    return signInWithGoogle(forceAccountSelection: true);
   }
 
   Future<void> signOut() async {
