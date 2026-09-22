@@ -180,6 +180,53 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return _tasks.where((task) => _isTaskOnDate(task, date)).toList();
   }
 
+  Map<String, int> _getTaskLanesForWeek(DateTime date) {
+    final weekStart = DateTime(
+      date.year,
+      date.month,
+      date.day - (date.weekday % 7),
+    );
+    final weekEnd = weekStart.add(const Duration(days: 6));
+    final weekTasks =
+        _tasks.where((task) {
+          final start = task.startDate ?? task.dueDate;
+          final end = task.dueDate ?? task.startDate;
+          if (start == null || end == null) return false;
+          final startDay = DateTime(start.year, start.month, start.day);
+          final endDay = DateTime(end.year, end.month, end.day);
+          return !endDay.isBefore(weekStart) && !startDay.isAfter(weekEnd);
+        }).toList()..sort((a, b) {
+          final aStart = a.startDate ?? a.dueDate!;
+          final bStart = b.startDate ?? b.dueDate!;
+          final startComparison = DateTime(
+            aStart.year,
+            aStart.month,
+            aStart.day,
+          ).compareTo(DateTime(bStart.year, bStart.month, bStart.day));
+          return startComparison != 0 ? startComparison : a.id.compareTo(b.id);
+        });
+
+    final laneEndDates = <DateTime>[];
+    final lanes = <String, int>{};
+    for (final task in weekTasks) {
+      final start = task.startDate ?? task.dueDate!;
+      final end = task.dueDate ?? task.startDate!;
+      final startDay = DateTime(start.year, start.month, start.day);
+      final endDay = DateTime(end.year, end.month, end.day);
+      var lane = laneEndDates.indexWhere(
+        (laneEnd) => laneEnd.isBefore(startDay),
+      );
+      if (lane == -1) {
+        lane = laneEndDates.length;
+        laneEndDates.add(endDay);
+      } else {
+        laneEndDates[lane] = endDay;
+      }
+      lanes[task.id] = lane;
+    }
+    return lanes;
+  }
+
   void _toggleTaskCompletion(Task task) {
     setState(() {
       task.isCompleted = !task.isCompleted;
@@ -566,6 +613,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                           final dayTasks = _getTasksForDate(
                                             date,
                                           );
+                                          final taskLanes =
+                                              _getTaskLanesForWeek(date);
+                                          final laneCount = taskLanes.values
+                                              .fold<int>(
+                                                0,
+                                                (laneCount, lane) =>
+                                                    lane >= laneCount
+                                                    ? lane + 1
+                                                    : laneCount,
+                                              )
+                                              .clamp(0, 3);
                                           final borderColor = isDark
                                               ? Colors.grey[800]!
                                               : Colors.grey[300]!;
@@ -613,8 +671,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                               ),
                                               padding: const EdgeInsets.only(
                                                 top: 2,
-                                                left: 4,
-                                                right: 4,
                                                 bottom: 2,
                                               ),
                                               child: Column(
@@ -690,9 +746,22 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                       physics:
                                                           const NeverScrollableScrollPhysics(),
                                                       padding: EdgeInsets.zero,
-                                                      children: dayTasks.take(3).map((
-                                                        task,
+                                                      children: List.generate(laneCount, (
+                                                        lane,
                                                       ) {
+                                                        final task = dayTasks
+                                                            .where(
+                                                              (task) =>
+                                                                  taskLanes[task
+                                                                      .id] ==
+                                                                  lane,
+                                                            )
+                                                            .firstOrNull;
+                                                        if (task == null) {
+                                                          return const SizedBox(
+                                                            height: 20,
+                                                          );
+                                                        }
                                                         final start =
                                                             task.startDate ??
                                                             task.dueDate ??
@@ -811,7 +880,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                                                     .ellipsis,
                                                           ),
                                                         );
-                                                      }).toList(),
+                                                      }),
                                                     ),
                                                   ),
                                                 ],
