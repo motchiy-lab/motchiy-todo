@@ -259,10 +259,16 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
     return completed;
   }
 
+  List<Task> _getVisibleTasks() {
+    final uncompleted = _tasks
+        .where((t) => !t.isCompleted && _isTaskActive(t) && !_isTaskExpired(t))
+        .toList();
+    final expired = _tasks.where((t) => _isTaskExpired(t)).toList();
+    return [...uncompleted, ...expired, ..._getCompletedTasks()];
+  }
+
   void _focusPreviousTask(Task task) {
-    final uncompleted = _tasks.where((t) => !t.isCompleted).toList();
-    final completed = _getCompletedTasks();
-    final list = [...uncompleted, ...completed];
+    final list = _getVisibleTasks();
     final index = list.indexWhere((t) => t.id == task.id);
     if (index > 0) {
       _getFocusNode(list[index - 1]).requestFocus();
@@ -270,9 +276,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
   }
 
   void _focusNextTask(Task task) {
-    final uncompleted = _tasks.where((t) => !t.isCompleted).toList();
-    final completed = _getCompletedTasks();
-    final list = [...uncompleted, ...completed];
+    final list = _getVisibleTasks();
     final index = list.indexWhere((t) => t.id == task.id);
     if (index != -1 && index < list.length - 1) {
       _getFocusNode(list[index + 1]).requestFocus();
@@ -292,9 +296,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
   }
 
   void _deleteTask(Task task) {
-    final uncompleted = _tasks.where((t) => !t.isCompleted).toList();
-    final completed = _getCompletedTasks();
-    final list = [...uncompleted, ...completed];
+    final list = _getVisibleTasks();
     final index = list.indexWhere((t) => t.id == task.id);
 
     setState(() {
@@ -491,10 +493,11 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final uncompletedTasks = _tasks
-        .where((t) => !t.isCompleted && _isTaskActive(t) && !_isTaskExpired(t))
+    final visibleTasks = _getVisibleTasks();
+    final uncompletedTasks = visibleTasks
+        .where((t) => !t.isCompleted && !_isTaskExpired(t))
         .toList();
-    final expiredTasks = _tasks.where((t) => _isTaskExpired(t)).toList();
+    final expiredTasks = visibleTasks.where(_isTaskExpired).toList();
     final completedTasks = _getCompletedTasks();
 
     return Scaffold(
