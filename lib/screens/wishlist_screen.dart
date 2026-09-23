@@ -15,40 +15,54 @@ class WishlistScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        titleSpacing: 24,
-        elevation: 0,
-        title: Text(
-          '欲しいもの',
-          style: TextStyle(
-            color: colorScheme.primary,
-            fontWeight: FontWeight.bold,
+        titleSpacing: 0,
+        title: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 750),
+            child: Row(
+              children: [
+                Text(
+                  '欲しいもの',
+                  style: TextStyle(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                if (!isMobile)
+                  IconButton(
+                    onPressed: () => _showRefreshMessage(context),
+                    tooltip: '再読み込み',
+                    icon: const Icon(Icons.refresh),
+                  ),
+              ],
+            ),
           ),
         ),
-        actions: isMobile
-            ? null
-            : [
-                IconButton(
-                  onPressed: () => _showRefreshMessage(context),
-                  tooltip: '再読み込み',
-                  icon: const Icon(Icons.refresh),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 750),
+          child: RefreshIndicator(
+            onRefresh: () async => _showRefreshMessage(context),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const [
+                SizedBox(
+                  height: 500,
+                  child: Center(
+                    child: Text(
+                      'この機能は開発中です',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                 ),
               ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async => _showRefreshMessage(context),
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: const [
-            SizedBox(
-              height: 500,
-              child: Center(
-                child: Text(
-                  'この機能は開発中です',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-              ),
             ),
-          ],
+          ),
         ),
       ),
     );

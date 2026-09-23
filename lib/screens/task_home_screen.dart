@@ -520,29 +520,36 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        titleSpacing: 24,
-        title: Text(
-          'ToDoリスト',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.primary,
-            fontWeight: FontWeight.bold,
+        titleSpacing: 0,
+        title: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 750),
+            child: Row(
+              children: [
+                Text(
+                  'ToDoリスト',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                if (!_isMobile)
+                  IconButton(
+                    onPressed: _isRefreshing ? null : _refreshTasks,
+                    tooltip: '再読み込み',
+                    icon: _isRefreshing
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh),
+                  ),
+              ],
+            ),
           ),
         ),
-        actions: _isMobile
-            ? null
-            : [
-                IconButton(
-                  onPressed: _isRefreshing ? null : _refreshTasks,
-                  tooltip: '再読み込み',
-                  icon: _isRefreshing
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh),
-                ),
-              ],
         elevation: 0,
       ),
       body: GestureDetector(
@@ -556,7 +563,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
               : Align(
                   alignment: Alignment.topCenter,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 700),
+                    constraints: const BoxConstraints(maxWidth: 750),
                     child: RefreshIndicator(
                       onRefresh: _refreshTasks,
                       child: SingleChildScrollView(
