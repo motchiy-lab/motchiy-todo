@@ -362,32 +362,36 @@ class CalendarScreenState extends State<CalendarScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         titleSpacing: 0,
+        automaticallyImplyLeading: false,
         title: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 750),
-            child: Row(
-              children: [
-                Text(
-                  'カレンダー',
-                  style: TextStyle(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.bold,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Text(
+                    'カレンダー',
+                    style: TextStyle(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const Spacer(),
-                if (!_isMobile)
-                  IconButton(
-                    onPressed: _isRefreshing ? null : _refreshTasks,
-                    tooltip: '再読み込み',
-                    icon: _isRefreshing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.refresh),
-                  ),
-              ],
+                  const Spacer(),
+                  if (!_isMobile)
+                    IconButton(
+                      onPressed: _isRefreshing ? null : _refreshTasks,
+                      tooltip: '再読み込み',
+                      icon: _isRefreshing
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.refresh),
+                    ),
+                ],
+              ),
             ),
           ),
         ),

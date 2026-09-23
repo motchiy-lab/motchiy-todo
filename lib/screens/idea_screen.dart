@@ -16,26 +16,30 @@ class IdeaScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         titleSpacing: 0,
+        automaticallyImplyLeading: false,
         title: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 750),
-            child: Row(
-              children: [
-                Text(
-                  'アイデア',
-                  style: TextStyle(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.bold,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Text(
+                    'アイデア',
+                    style: TextStyle(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const Spacer(),
-                if (!isMobile)
-                  IconButton(
-                    onPressed: () => _showRefreshMessage(context),
-                    tooltip: '再読み込み',
-                    icon: const Icon(Icons.refresh),
-                  ),
-              ],
+                  const Spacer(),
+                  if (!isMobile)
+                    IconButton(
+                      onPressed: () => _showRefreshMessage(context),
+                      tooltip: '再読み込み',
+                      icon: const Icon(Icons.refresh),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
