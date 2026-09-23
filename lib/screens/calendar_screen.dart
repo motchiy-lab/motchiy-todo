@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -23,6 +24,7 @@ class CalendarScreen extends StatefulWidget {
 class CalendarScreenState extends State<CalendarScreen> {
   List<Task> _tasks = [];
   bool _isLoading = true;
+  bool _isRefreshing = false;
   bool _showHint = true;
   late DateTime _currentMonth;
   late DateTime _selectedDate;
@@ -32,6 +34,11 @@ class CalendarScreenState extends State<CalendarScreen> {
   DateTime? _dragStartDate;
   DateTime? _dragEndDate;
   bool _isDragging = false;
+
+  bool get _isMobile =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   CollectionReference<Map<String, dynamic>> get _taskCollection =>
       FirebaseFirestore.instance
@@ -89,7 +96,17 @@ class CalendarScreenState extends State<CalendarScreen> {
 
   Future<void> loadTasks() => _loadTasks();
 
-  Future<void> _saveTasks() async {
+  Future<void> _refreshTasks() async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+    try {
+      await _loadTasks();
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
+  }
+
+  Future<void> _saveTasks({String? deletedTaskId}) async {
     final prefs = await SharedPreferences.getInstance();
     final String encoded = jsonEncode(_tasks.map((t) => t.toJson()).toList());
     await prefs.setString('tasks_key', encoded);
@@ -98,6 +115,9 @@ class CalendarScreenState extends State<CalendarScreen> {
       final batch = FirebaseFirestore.instance.batch();
       for (final task in _tasks) {
         batch.set(_taskCollection.doc(task.id), task.toJson());
+      }
+      if (deletedTaskId != null) {
+        batch.delete(_taskCollection.doc(deletedTaskId));
       }
       await batch.commit();
     } catch (_) {
@@ -245,7 +265,7 @@ class CalendarScreenState extends State<CalendarScreen> {
     setState(() {
       _tasks.removeWhere((t) => t.id == task.id);
     });
-    _saveTasks();
+    _saveTasks(deletedTaskId: task.id);
   }
 
   Future<void> _createTaskForRange(DateTime start, DateTime end) async {
@@ -350,6 +370,21 @@ class CalendarScreenState extends State<CalendarScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
+        actions: _isMobile
+            ? null
+            : [
+                IconButton(
+                  onPressed: _isRefreshing ? null : _refreshTasks,
+                  tooltip: '再読み込み',
+                  icon: _isRefreshing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh),
+                ),
+              ],
       ),
       body: SafeArea(
         child: _isLoading
@@ -358,7 +393,7 @@ class CalendarScreenState extends State<CalendarScreen> {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 750),
                   child: RefreshIndicator(
-                    onRefresh: _loadTasks,
+                    onRefresh: _refreshTasks,
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(16),
                       child: Column(

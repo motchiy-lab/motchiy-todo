@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,9 +21,15 @@ class TaskHomeScreen extends StatefulWidget {
 class TaskHomeScreenState extends State<TaskHomeScreen> {
   List<Task> _tasks = [];
   bool _isLoading = true;
+  bool _isRefreshing = false;
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, FocusNode> _focusNodes = {};
   Future<void> _saveQueue = Future<void>.value();
+
+  bool get _isMobile =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   CollectionReference<Map<String, dynamic>> get _taskCollection =>
       FirebaseFirestore.instance
@@ -83,6 +90,16 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
   }
 
   Future<void> loadTasks() => _loadTasks();
+
+  Future<void> _refreshTasks() async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+    try {
+      await _loadTasks();
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
+  }
 
   Future<void> _loadTasks() async {
     try {
@@ -511,6 +528,21 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
+        actions: _isMobile
+            ? null
+            : [
+                IconButton(
+                  onPressed: _isRefreshing ? null : _refreshTasks,
+                  tooltip: '再読み込み',
+                  icon: _isRefreshing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh),
+                ),
+              ],
         elevation: 0,
       ),
       body: GestureDetector(
@@ -525,60 +557,63 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
                   alignment: Alignment.topCenter,
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 700),
-                    child: SingleChildScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ...uncompletedTasks.map(
-                              (task) => _buildTaskRow(task),
-                            ),
-                            if (expiredTasks.isNotEmpty) ...[
-                              const Padding(
-                                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                                child: Text(
-                                  '期限切れ',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              ),
-                              ...expiredTasks.map(
+                    child: RefreshIndicator(
+                      onRefresh: _refreshTasks,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ...uncompletedTasks.map(
                                 (task) => _buildTaskRow(task),
                               ),
-                            ],
-                            if (completedTasks.isNotEmpty) ...[
-                              const Padding(
-                                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                                child: Text(
-                                  '完了済み',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey,
+                              if (expiredTasks.isNotEmpty) ...[
+                                const Padding(
+                                  padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                                  child: Text(
+                                    '期限切れ',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.red,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              ...completedTasks.map(
-                                (task) => _buildTaskRow(task),
+                                ...expiredTasks.map(
+                                  (task) => _buildTaskRow(task),
+                                ),
+                              ],
+                              if (completedTasks.isNotEmpty) ...[
+                                const Padding(
+                                  padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                                  child: Text(
+                                    '完了済み',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ),
+                                ...completedTasks.map(
+                                  (task) => _buildTaskRow(task),
+                                ),
+                              ],
+                              SizedBox(
+                                height: 200,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () {
+                                    FocusScope.of(context).unfocus();
+                                  },
+                                  onDoubleTap: _addTaskAtEnd,
+                                  child: const SizedBox.expand(),
+                                ),
                               ),
                             ],
-                            SizedBox(
-                              height: 200,
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () {
-                                  FocusScope.of(context).unfocus();
-                                },
-                                onDoubleTap: _addTaskAtEnd,
-                                child: const SizedBox.expand(),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,6 +16,12 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isAccountActionRunning = false;
+  bool _isRefreshing = false;
+
+  bool get _isMobile =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   DocumentReference<Map<String, dynamic>> get _settingsDocument =>
       FirebaseFirestore.instance
@@ -50,6 +57,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await prefs.setBool('show_nav_labels', showLabels);
     await _saveCloudSettings({'showNavLabels': showLabels});
     setState(() {});
+  }
+
+  Future<void> _refreshSettings() async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      themeIndexNotifier.value = prefs.getInt('theme_color_index') ?? 0;
+      themeModeNotifier.value =
+          ThemeMode.values[prefs.getInt('theme_mode_index') ?? 0];
+      showNavLabelsNotifier.value = prefs.getBool('show_nav_labels') ?? true;
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('設定を再読み込みしました')));
+      }
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
   }
 
   Future<void> _switchAccount() async {
@@ -197,183 +222,205 @@ class _SettingsScreenState extends State<SettingsScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
+        actions: _isMobile
+            ? null
+            : [
+                IconButton(
+                  onPressed: _isRefreshing ? null : _refreshSettings,
+                  tooltip: '再読み込み',
+                  icon: _isRefreshing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh),
+                ),
+              ],
       ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 600),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              children: [
-                const SizedBox(height: 8),
-                _buildAccountSection(colorScheme, isDark),
-                const SizedBox(height: 32),
-                const Text(
-                  'カラーテーマ',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'アプリ全体のカラーテーマを変更できます',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+            child: RefreshIndicator(
+              onRefresh: _refreshSettings,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                children: [
+                  const SizedBox(height: 8),
+                  _buildAccountSection(colorScheme, isDark),
+                  const SizedBox(height: 32),
+                  const Text(
+                    'カラーテーマ',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                ),
-                const SizedBox(height: 10),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 2.6,
-                  ),
-                  itemCount: appThemes.length,
-                  itemBuilder: (context, index) {
-                    final isSelected = themeIndexNotifier.value == index;
-                    return InkWell(
-                      onTap: () => _changeTheme(index),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? colorScheme.primary.withValues(alpha: 0.15)
-                              : (isDark ? Colors.grey[900] : Colors.grey[100]),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isSelected
-                                ? colorScheme.primary
-                                : (isDark
-                                      ? Colors.grey[800]!
-                                      : Colors.grey[300]!),
-                            width: isSelected ? 2 : 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: appThemes[index],
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                appThemeNames[index],
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                ),
-                              ),
-                            ),
-                            if (isSelected)
-                              Icon(
-                                Icons.check,
-                                size: 18,
-                                color: colorScheme.primary,
-                              ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 32),
-                const Text(
-                  '外観モード',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'アプリの表示モード（ライト・ダーク・システム）を選択できます',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? Colors.grey[400] : Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildModeButton(
-                        title: 'システム',
-                        icon: Icons.brightness_auto,
-                        mode: ThemeMode.system,
-                        isDark: isDark,
-                        colorScheme: colorScheme,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildModeButton(
-                        title: 'ライト',
-                        icon: Icons.light_mode,
-                        mode: ThemeMode.light,
-                        isDark: isDark,
-                        colorScheme: colorScheme,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildModeButton(
-                        title: 'ダーク',
-                        icon: Icons.dark_mode,
-                        mode: ThemeMode.dark,
-                        isDark: isDark,
-                        colorScheme: colorScheme,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                const Text(
-                  'ナビゲーション表示モード',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                if (showNavLabelsNotifier.value) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'タブ切り替えボタンの表示方法を選択できます',
+                    'アプリ全体のカラーテーマを変更できます',
                     style: TextStyle(
                       fontSize: 12,
                       color: isDark ? Colors.grey[400] : Colors.grey[600],
                     ),
                   ),
+                  const SizedBox(height: 10),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 2.6,
+                        ),
+                    itemCount: appThemes.length,
+                    itemBuilder: (context, index) {
+                      final isSelected = themeIndexNotifier.value == index;
+                      return InkWell(
+                        onTap: () => _changeTheme(index),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? colorScheme.primary.withValues(alpha: 0.15)
+                                : (isDark
+                                      ? Colors.grey[900]
+                                      : Colors.grey[100]),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected
+                                  ? colorScheme.primary
+                                  : (isDark
+                                        ? Colors.grey[800]!
+                                        : Colors.grey[300]!),
+                              width: isSelected ? 2 : 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: appThemes[index],
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  appThemeNames[index],
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                              ),
+                              if (isSelected)
+                                Icon(
+                                  Icons.check,
+                                  size: 18,
+                                  color: colorScheme.primary,
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 32),
+                  const Text(
+                    '外観モード',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'アプリの表示モード（ライト・ダーク・システム）を選択できます',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildModeButton(
+                          title: 'システム',
+                          icon: Icons.brightness_auto,
+                          mode: ThemeMode.system,
+                          isDark: isDark,
+                          colorScheme: colorScheme,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildModeButton(
+                          title: 'ライト',
+                          icon: Icons.light_mode,
+                          mode: ThemeMode.light,
+                          isDark: isDark,
+                          colorScheme: colorScheme,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildModeButton(
+                          title: 'ダーク',
+                          icon: Icons.dark_mode,
+                          mode: ThemeMode.dark,
+                          isDark: isDark,
+                          colorScheme: colorScheme,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  const Text(
+                    'ナビゲーション表示モード',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  if (showNavLabelsNotifier.value) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'タブ切り替えボタンの表示方法を選択できます',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Radio<bool>(
+                      value: false,
+                      groupValue: showNavLabelsNotifier.value,
+                      onChanged: (value) {
+                        if (value != null) _changeNavDisplayMode(value);
+                      },
+                    ),
+                    title: const Text('シンプル'),
+                    onTap: () => _changeNavDisplayMode(false),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Radio<bool>(
+                      value: true,
+                      groupValue: showNavLabelsNotifier.value,
+                      onChanged: (value) {
+                        if (value != null) _changeNavDisplayMode(value);
+                      },
+                    ),
+                    title: const Text('詳細'),
+                    onTap: () => _changeNavDisplayMode(true),
+                  ),
                 ],
-                const SizedBox(height: 8),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Radio<bool>(
-                    value: false,
-                    groupValue: showNavLabelsNotifier.value,
-                    onChanged: (value) {
-                      if (value != null) _changeNavDisplayMode(value);
-                    },
-                  ),
-                  title: const Text('シンプル'),
-                  onTap: () => _changeNavDisplayMode(false),
-                ),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Radio<bool>(
-                    value: true,
-                    groupValue: showNavLabelsNotifier.value,
-                    onChanged: (value) {
-                      if (value != null) _changeNavDisplayMode(value);
-                    },
-                  ),
-                  title: const Text('詳細'),
-                  onTap: () => _changeNavDisplayMode(true),
-                ),
-              ],
+              ),
             ),
           ),
         ),
