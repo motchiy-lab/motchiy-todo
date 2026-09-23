@@ -6,10 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class GoogleDesktopOAuth {
-  static Future<Map<String, String>> authenticate(
-    String clientId,
-    String clientSecret,
-  ) async {
+  static Future<Map<String, String>> authenticate(String clientId) async {
     final verifier = _randomUrlSafeString(64);
     final challenge = base64Url
         .encode(sha256.convert(utf8.encode(verifier)).bytes)
@@ -61,13 +58,7 @@ class GoogleDesktopOAuth {
         );
       }
 
-      final tokens = await _exchangeCode(
-        clientId,
-        clientSecret,
-        code,
-        verifier,
-        redirectUri,
-      );
+      final tokens = await _exchangeCode(clientId, code, verifier, redirectUri);
       final idToken = tokens['id_token'];
       final accessToken = tokens['access_token'];
       if (idToken is! String || accessToken is! String) {
@@ -81,7 +72,6 @@ class GoogleDesktopOAuth {
 
   static Future<Map<String, dynamic>> _exchangeCode(
     String clientId,
-    String clientSecret,
     String code,
     String verifier,
     String redirectUri,
@@ -99,7 +89,6 @@ class GoogleDesktopOAuth {
         Uri(
           queryParameters: <String, String>{
             'client_id': clientId,
-            if (clientSecret.isNotEmpty) 'client_secret': clientSecret,
             'code': code,
             'code_verifier': verifier,
             'grant_type': 'authorization_code',

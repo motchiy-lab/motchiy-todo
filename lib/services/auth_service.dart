@@ -10,9 +10,6 @@ class AuthService {
   static const _desktopClientId = String.fromEnvironment(
     'GOOGLE_DESKTOP_CLIENT_ID',
   );
-  static const _desktopClientSecret = String.fromEnvironment(
-    'GOOGLE_DESKTOP_CLIENT_SECRET',
-  );
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
@@ -41,18 +38,7 @@ class AuthService {
             'GOOGLE_DESKTOP_CLIENT_IDを指定して起動してください。',
           );
         }
-        if (_desktopClientSecret.isEmpty) {
-          throw StateError(
-            'このWindowsアプリはGoogle OAuthシークレットなしでビルドされています。'
-            'flutter runまたはflutter build windowsに'
-            '--dart-define=GOOGLE_DESKTOP_CLIENT_SECRET=<secret>を指定して'
-            '再ビルドしてください。',
-          );
-        }
-        final tokens = await GoogleDesktopOAuth.authenticate(
-          _desktopClientId,
-          _desktopClientSecret,
-        );
+        final tokens = await GoogleDesktopOAuth.authenticate(_desktopClientId);
         return await _auth.signInWithCredential(
           GoogleAuthProvider.credential(
             idToken: tokens['id_token'],

@@ -85,16 +85,18 @@ Copy-Item config\google_oauth.json.example config\google_oauth.json
 ```
 
 `config/google_oauth.json` にGoogle Cloud Consoleで作成したデスクトップアプリの
-クライアントIDとシークレットを設定してください。このファイルはGit管理対象外です。
+クライアントIDを設定してください。このファイルはGit管理対象外です。デスクトップ
+アプリは公開クライアントとしてPKCEを使用するため、クライアントシークレットは設定
+しません。
 Google OAuthのリダイレクトURIには、アプリが使用する次のループバック形式を許可します。
 
 ```text
 http://127.0.0.1:<空きポート>
 ```
 
-設定値は `--dart-define-from-file` でビルド成果物へ埋め込まれるため、変更後は必ず
-再ビルドしてください。クライアントシークレットをソースコード、Issue、ログへ
-保存・掲載しないでください。
+クライアントIDは `--dart-define-from-file` でビルド成果物へ埋め込まれますが、
+クライアントシークレットは成果物へ含めないでください。変更後は必ず再ビルドして
+ください。
 
 ## 起動と個別ビルド
 
