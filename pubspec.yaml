@@ -1,7 +1,7 @@
 name: motchiy_todo
 description: "カレンダーとメモ帳の中間をとったタスク管理アプリ"
 publish_to: 'none'
-version: 1.2.1+6
+version: 1.2.2
 
 environment:
   sdk: ^3.13.3
