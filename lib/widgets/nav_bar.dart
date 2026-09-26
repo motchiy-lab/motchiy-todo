@@ -5,7 +5,6 @@ class NavItem extends StatelessWidget {
   final IconData outlineIcon;
   final IconData filledIcon;
   final String label;
-  final bool showLabel;
   final int currentIndex;
   final Color? selectedColor;
   final ValueChanged<int> onTap;
@@ -16,7 +15,6 @@ class NavItem extends StatelessWidget {
     required this.outlineIcon,
     required this.filledIcon,
     required this.label,
-    required this.showLabel,
     required this.currentIndex,
     this.selectedColor,
     required this.onTap,
@@ -28,7 +26,7 @@ class NavItem extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final highlightColor = selectedColor ?? colorScheme.onPrimary;
     final color = isSelected ? highlightColor : Colors.grey;
-    final indicatorSize = showLabel ? 68.0 : 68.0;
+    const indicatorSize = 68.0;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -64,36 +62,34 @@ class NavItem extends StatelessWidget {
                     color: color,
                     size: 22,
                   ),
-                  if (showLabel) ...[
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      height: 16,
-                      child: Center(
-                        child: Text(
-                          label,
-                          textAlign: TextAlign.center,
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontSize: 10.5,
-                                fontWeight: isSelected
-                                    ? FontWeight.w700
-                                    : FontWeight.w600,
-                                color: color,
-                                letterSpacing: 0.1,
-                              ) ??
-                              TextStyle(
-                                color: color,
-                                fontSize: 10.5,
-                                fontWeight: isSelected
-                                    ? FontWeight.w700
-                                    : FontWeight.w600,
-                              ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    height: 16,
+                    child: Center(
+                      child: Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontSize: 10.5,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                              color: color,
+                              letterSpacing: 0.1,
+                            ) ??
+                            TextStyle(
+                              color: color,
+                              fontSize: 10.5,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                            ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),

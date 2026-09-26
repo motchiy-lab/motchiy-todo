@@ -43,7 +43,7 @@ class _SettingsLoader extends StatelessWidget {
     final prefs = await SharedPreferences.getInstance();
     final themeColor = settings['themeColorIndex'];
     final themeMode = settings['themeModeIndex'];
-    final showLabels = settings['showNavLabels'];
+    final enableTabAnimations = settings['enableTabAnimations'];
     if (themeColor is int) {
       themeIndexNotifier.value = themeColor;
       await prefs.setInt('theme_color_index', themeColor);
@@ -54,9 +54,9 @@ class _SettingsLoader extends StatelessWidget {
       themeModeNotifier.value = ThemeMode.values[themeMode];
       await prefs.setInt('theme_mode_index', themeMode);
     }
-    if (showLabels is bool) {
-      showNavLabelsNotifier.value = showLabels;
-      await prefs.setBool('show_nav_labels', showLabels);
+    if (enableTabAnimations is bool) {
+      enableTabAnimationsNotifier.value = enableTabAnimations;
+      await prefs.setBool('enable_tab_animations', enableTabAnimations);
     }
   }
 

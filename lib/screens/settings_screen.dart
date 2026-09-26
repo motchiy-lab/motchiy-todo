@@ -51,11 +51,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {});
   }
 
-  Future<void> _changeNavDisplayMode(bool showLabels) async {
-    showNavLabelsNotifier.value = showLabels;
+  Future<void> _changeTabAnimations(bool enabled) async {
+    enableTabAnimationsNotifier.value = enabled;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('show_nav_labels', showLabels);
-    await _saveCloudSettings({'showNavLabels': showLabels});
+    await prefs.setBool('enable_tab_animations', enabled);
+    await _saveCloudSettings({'enableTabAnimations': enabled});
     setState(() {});
   }
 
@@ -67,7 +67,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       themeIndexNotifier.value = prefs.getInt('theme_color_index') ?? 0;
       themeModeNotifier.value =
           ThemeMode.values[prefs.getInt('theme_mode_index') ?? 0];
-      showNavLabelsNotifier.value = prefs.getBool('show_nav_labels') ?? true;
+      enableTabAnimationsNotifier.value =
+          prefs.getBool('enable_tab_animations') ?? true;
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('設定を再読み込みしました')));
@@ -223,12 +224,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: [
-                  Text(
-                    '設定',
-                    style: TextStyle(
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '設定',
+                        style: TextStyle(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'アプリの設定をさまざまな変更',
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ),
                   const Spacer(),
                   if (!_isMobile)
@@ -278,13 +291,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 2.6,
-                        ),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: _isMobile ? 2 : 3,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: _isMobile ? 2.6 : 4.0,
+                    ),
                     itemCount: appThemes.length,
                     itemBuilder: (context, index) {
                       final isSelected = themeIndexNotifier.value == index;
@@ -390,45 +402,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 24),
                   const Text(
-                    'ナビゲーション表示モード',
+                    'タブ切り替えアニメーション',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                  if (showNavLabelsNotifier.value) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'タブ切り替えボタンの表示方法を選択できます',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.grey[400] : Colors.grey[600],
-                      ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'タブを切り替えるときのスライドとフェードを設定できます',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
                     ),
-                  ],
-                  const SizedBox(height: 8),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Radio<bool>(
-                      value: false,
-                      groupValue: showNavLabelsNotifier.value,
-                      onChanged: (value) {
-                        if (value != null) _changeNavDisplayMode(value);
-                      },
-                    ),
-                    title: const Text('シンプル'),
-                    onTap: () => _changeNavDisplayMode(false),
                   ),
-                  ListTile(
+                  SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Radio<bool>(
-                      value: true,
-                      groupValue: showNavLabelsNotifier.value,
-                      onChanged: (value) {
-                        if (value != null) _changeNavDisplayMode(value);
-                      },
-                    ),
-                    title: const Text('詳細'),
-                    onTap: () => _changeNavDisplayMode(true),
+                    title: const Text('アニメーションを使用する'),
+                    value: enableTabAnimationsNotifier.value,
+                    onChanged: _changeTabAnimations,
                   ),
                 ],
               ),
