@@ -13,7 +13,7 @@ Flutterで作成したタスク管理アプリです。Windows、Android、Linux
 | Windows | `.msix` | MSIXをインストールして起動 |
 | Android | `.apk` | APKを端末へ転送してインストール |
 | Linux | `.tar.gz` | 展開してELFバイナリを実行 |
-| Web | `.zip` | 展開した内容をWebサーバーへ配置 |
+| Web | `.zip` | 各自でビルド |
 
 ### Windows
 
