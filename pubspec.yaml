@@ -1,7 +1,7 @@
 name: motchiy_todo
-description: "A new Flutter project."
+description: "カレンダーとメモ帳の中間をとったタスク管理アプリ"
 publish_to: 'none'
-version: 1.1.1+1
+version: 1.2.1+6
 
 environment:
   sdk: ^3.13.3
@@ -23,6 +23,14 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: "true"
+  adaptive_icon_background: "#504E7F"
+  adaptive_icon_foreground: "assets/android_icon_foreground.png"
+  image_path: "assets/app_icon.png"

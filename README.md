@@ -121,19 +121,32 @@ flutter build linux --release \
   --dart-define-from-file=config/google_oauth.json
 ```
 
-## 全プラットフォーム向けのビルド
+## プラットフォームを選択したビルド
 
-WindowsのPowerShellから、次の1コマンドでMSIX、APK、LinuxのELFと `data/` を含む
-TAR.GZ、WebのZIPを作成できます。
+ビルドするプラットフォームは `tool/build_platforms.json` で選択できます。
+`platforms` 配列に `windows`、`android`、`linux`、`web` のうち必要なものを指定してください。
+初期設定では全プラットフォームをビルドします。たとえばWindowsとAndroidだけにする場合:
+
+```json
+{
+  "platforms": [
+    "windows",
+    "android"
+  ]
+}
+```
+
+WindowsのPowerShellから、設定されたプラットフォームをまとめてビルドできます。
 
 ```powershell
 .\tool\build_all.ps1
 ```
 
-成果物は `dist/` に出力されます。Windows SDKの `makeappx.exe` がMSIX作成に必要です。
-Windows上でLinux版も作成する場合は、WSLにLinux用Flutterをインストールし、
-`/home/motchiy/development/flutter/bin/flutter` で実行できる状態にしてください。
-Linux版を省略する場合は次を使用します。
+成果物は `dist/` に出力されます。Windows版を選択する場合は、Windows SDKの
+`makeappx.exe` がMSIX作成に必要です。Linux版を選択する場合は、Windows上ではWSLに
+Linux用Flutterをインストールし、`/home/motchiy/development/flutter/bin/flutter` で
+実行できる状態にしてください。`-SkipLinux` を指定すると、設定ファイルでLinuxが
+選択されていてもその実行ではLinux版を省略できます。
 
 ```powershell
 .\tool\build_all.ps1 -SkipLinux

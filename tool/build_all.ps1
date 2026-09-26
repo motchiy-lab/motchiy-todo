@@ -177,7 +177,7 @@ function Invoke-MsixSigning {
 function New-MsixLogo {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$IconPath,
+        [string]$SourcePath,
         [Parameter(Mandatory = $true)]
         [string]$OutputPath,
         [Parameter(Mandatory = $true)]
@@ -185,22 +185,36 @@ function New-MsixLogo {
     )
 
     Add-Type -AssemblyName System.Drawing
-    $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($IconPath)
-    if (-not $icon) {
-        throw "Could not load the Windows application icon: $IconPath"
+    $source = [System.Drawing.Image]::FromFile($SourcePath)
+    if ($source.Width -ne $source.Height) {
+        $source.Dispose()
+        throw "Windows MSIX logo source must be square: $SourcePath"
     }
 
     $bitmap = New-Object System.Drawing.Bitmap($Size, $Size)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
+        $graphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
+        $graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+        $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+        $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
         $graphics.Clear([System.Drawing.Color]::Transparent)
-        $graphics.DrawIcon($icon, (New-Object System.Drawing.Rectangle(0, 0, $Size, $Size)))
+        $graphics.DrawImage(
+            $source,
+            (New-Object System.Drawing.Rectangle(0, 0, $Size, $Size)),
+            0,
+            0,
+            $source.Width,
+            $source.Height,
+            [System.Drawing.GraphicsUnit]::Pixel
+        )
         $bitmap.Save($OutputPath, [System.Drawing.Imaging.ImageFormat]::Png)
     }
     finally {
         $graphics.Dispose()
         $bitmap.Dispose()
-        $icon.Dispose()
+        $source.Dispose()
     }
 }
 
@@ -247,44 +261,92 @@ function Invoke-FlutterPubGet {
 
 $root = Split-Path -Parent $PSScriptRoot
 $configPath = Join-Path $root 'config\google_oauth.json'
+$platformsConfigPath = Join-Path $PSScriptRoot 'build_platforms.json'
 $outputPath = [IO.Path]::GetFullPath((Join-Path $root $OutputDirectory))
 $buildVersion = Get-Version $Version
+
+if (-not (Test-Path $platformsConfigPath)) {
+    throw "Missing build platform configuration: $platformsConfigPath"
+}
+
+try {
+    $platformsConfig = Get-Content $platformsConfigPath -Raw | ConvertFrom-Json
+}
+catch {
+    throw "Could not parse build platform configuration at ${platformsConfigPath}: $($_.Exception.Message)"
+}
+
+if ($null -eq $platformsConfig.platforms -or $platformsConfig.platforms -isnot [array]) {
+    throw "The platforms property in $platformsConfigPath must be a JSON array."
+}
+
+$validPlatforms = @('windows', 'android', 'linux', 'web')
+$selectedPlatforms = @()
+foreach ($platform in $platformsConfig.platforms) {
+    if ($platform -isnot [string] -or [string]::IsNullOrWhiteSpace($platform)) {
+        throw "Platform names in $platformsConfigPath must be non-empty strings."
+    }
+
+    $normalizedPlatform = $platform.Trim().ToLowerInvariant()
+    if ($normalizedPlatform -notin $validPlatforms) {
+        throw "Unknown platform '$platform' in $platformsConfigPath. Valid platforms: $($validPlatforms -join ', ')."
+    }
+    if ($normalizedPlatform -in $selectedPlatforms) {
+        throw "Platform '$normalizedPlatform' is listed more than once in $platformsConfigPath."
+    }
+
+    $selectedPlatforms += $normalizedPlatform
+}
+
+if ($SkipLinux) {
+    $selectedPlatforms = @($selectedPlatforms | Where-Object { $_ -ne 'linux' })
+}
+if ($selectedPlatforms.Count -eq 0) {
+    throw "No platforms are selected in $platformsConfigPath."
+}
 
 if (-not (Test-Path $configPath)) {
     throw "Missing $configPath. Copy config\google_oauth.json.example and fill in the OAuth credentials."
 }
 
+Write-Host "Selected platforms: $($selectedPlatforms -join ', ')"
 New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
 Get-ChildItem $outputPath -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
 
 Push-Location $root
 try {
     $flutterDefine = "--dart-define-from-file=config/google_oauth.json"
-
-    Write-Host 'Building Windows bundle...'
-    Invoke-FlutterPubGet
     $flutterVersionArgs = @('--build-name', $buildVersion.Name, '--build-number', "$($buildVersion.Number)")
-    $windowsArgs = @('build', 'windows', "--$Configuration") + $flutterVersionArgs + @($flutterDefine) + $FlutterArgs
-    Invoke-Tool 'flutter' $windowsArgs
 
-    $windowsBundle = Join-Path $root "build\windows\x64\runner\$($Configuration.Substring(0, 1).ToUpper() + $Configuration.Substring(1))"
-    if (-not (Test-Path $windowsBundle)) {
-        throw "Windows bundle was not found: $windowsBundle"
-    }
+    if ($selectedPlatforms -contains 'windows') {
+        Write-Host 'Building Windows bundle...'
+        Invoke-FlutterPubGet
+        $windowsArgs = @('build', 'windows', "--$Configuration") + $flutterVersionArgs + @($flutterDefine) + $FlutterArgs
+        Invoke-Tool 'flutter' $windowsArgs
 
-    Write-Host 'Creating MSIX...'
-    $msixStaging = Join-Path $env:TEMP "motchiy-todo-msix-$([guid]::NewGuid())"
-    New-Item -ItemType Directory -Path $msixStaging -Force | Out-Null
-    try {
-        Copy-Item (Join-Path $windowsBundle '*') $msixStaging -Recurse -Force
-        $logo = Join-Path $root 'windows\runner\resources\app_icon.ico'
-        New-MsixLogo $logo (Join-Path $msixStaging 'logo-150.png') 150
-        New-MsixLogo $logo (Join-Path $msixStaging 'logo-44.png') 44
-        @"
+        $windowsBundle = Join-Path $root "build\windows\x64\runner\$($Configuration.Substring(0, 1).ToUpper() + $Configuration.Substring(1))"
+        if (-not (Test-Path $windowsBundle)) {
+            throw "Windows bundle was not found: $windowsBundle"
+        }
+
+        Write-Host 'Creating MSIX...'
+        $msixStaging = Join-Path $env:TEMP "motchiy-todo-msix-$([guid]::NewGuid())"
+        New-Item -ItemType Directory -Path $msixStaging -Force | Out-Null
+        try {
+            Copy-Item (Join-Path $windowsBundle '*') $msixStaging -Recurse -Force
+            $logo = Join-Path $root 'assets\windows_app_icon.png'
+            New-MsixLogo $logo (Join-Path $msixStaging 'logo-150.png') 150
+            New-MsixLogo $logo (Join-Path $msixStaging 'logo-44.png') 44
+            New-MsixLogo $logo (Join-Path $msixStaging 'logo-150.scale-200.png') 300
+            New-MsixLogo $logo (Join-Path $msixStaging 'logo-44.scale-200.png') 88
+            New-MsixLogo $logo (Join-Path $msixStaging 'logo-150.scale-400.png') 600
+            New-MsixLogo $logo (Join-Path $msixStaging 'logo-44.scale-400.png') 176
+            @"
 <?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
          xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
-         IgnorableNamespaces="uap">
+         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+         IgnorableNamespaces="uap rescap">
   <Identity Name="motchiy.todo" Publisher="CN=Motchiy" Version="$($buildVersion.Package)" />
   <Properties>
     <DisplayName>Motchiy ToDo</DisplayName>
@@ -297,41 +359,45 @@ try {
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
   </Dependencies>
   <Applications>
-    <Application Id="MotchiyToDo" Executable="motchiy_todo.exe">
-      <uap:VisualElements AppListEntry="none" DisplayName="Motchiy ToDo" Description="Motchiy ToDo" BackgroundColor="#FFFFFF" Square150x150Logo="logo-150.png" Square44x44Logo="logo-44.png" />
+    <Application Id="MotchiyToDo" Executable="motchiy_todo.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements AppListEntry="default" DisplayName="Motchiy ToDo" Description="Motchiy ToDo" BackgroundColor="#504E7F" Square150x150Logo="logo-150.png" Square44x44Logo="logo-44.png" />
     </Application>
   </Applications>
   <Capabilities>
     <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
   </Capabilities>
 </Package>
 "@ | Set-Content (Join-Path $msixStaging 'AppxManifest.xml') -Encoding UTF8
 
-        $makeAppx = Get-MakeAppx
-        $msixPath = Join-Path $outputPath "motchiy-todo-windows-$($buildVersion.Package).msix"
-        Invoke-Tool $makeAppx @('pack', '/d', $msixStaging, '/p', $msixPath, '/o')
+            $makeAppx = Get-MakeAppx
+            $msixPath = Join-Path $outputPath "motchiy-todo-windows-$($buildVersion.Package).msix"
+            Invoke-Tool $makeAppx @('pack', '/d', $msixStaging, '/p', $msixPath, '/o')
 
-        if (-not $SkipMsixSigning) {
-            $certificate = Get-MsixCertificate $CertificateThumbprint
-            Invoke-MsixSigning $msixPath $certificate $outputPath
+            if (-not $SkipMsixSigning) {
+                $certificate = Get-MsixCertificate $CertificateThumbprint
+                Invoke-MsixSigning $msixPath $certificate $outputPath
+            }
+        }
+        finally {
+            if (Test-Path $msixStaging) {
+                Remove-Item $msixStaging -Recurse -Force
+            }
         }
     }
-    finally {
-        if (Test-Path $msixStaging) {
-            Remove-Item $msixStaging -Recurse -Force
+
+    if ($selectedPlatforms -contains 'android') {
+        Write-Host 'Building Android APK...'
+        Invoke-FlutterPubGet
+        Invoke-Tool 'flutter' (@('build', 'apk', "--$Configuration") + $flutterVersionArgs + @($flutterDefine) + $FlutterArgs)
+        $apk = Join-Path $root "build\app\outputs\flutter-apk\app-$Configuration.apk"
+        if (-not (Test-Path $apk)) {
+            throw "APK was not found: $apk"
         }
+        Copy-Item $apk (Join-Path $outputPath "motchiy-todo-android-$($buildVersion.Package).apk") -Force
     }
 
-    Write-Host 'Building Android APK...'
-    Invoke-FlutterPubGet
-    Invoke-Tool 'flutter' (@('build', 'apk', "--$Configuration") + $flutterVersionArgs + @($flutterDefine) + $FlutterArgs)
-    $apk = Join-Path $root "build\app\outputs\flutter-apk\app-$Configuration.apk"
-    if (-not (Test-Path $apk)) {
-        throw "APK was not found: $apk"
-    }
-    Copy-Item $apk (Join-Path $outputPath "motchiy-todo-android-$($buildVersion.Package).apk") -Force
-
-    if (-not $SkipLinux) {
+    if ($selectedPlatforms -contains 'linux') {
         Write-Host 'Building Linux bundle...'
         Invoke-LinuxBuild
         $linuxConfiguration = $Configuration.Substring(0, 1).ToLower() + $Configuration.Substring(1)
@@ -354,14 +420,16 @@ try {
         }
     }
 
-    Write-Host 'Building web bundle...'
-    Invoke-FlutterPubGet
-    Invoke-Tool 'flutter' (@('build', 'web', "--$Configuration") + $flutterVersionArgs + @($flutterDefine) + $FlutterArgs)
-    $webBundle = Join-Path $root 'build\web'
-    if (-not (Test-Path $webBundle)) {
-        throw "Web bundle was not found: $webBundle"
+    if ($selectedPlatforms -contains 'web') {
+        Write-Host 'Building web bundle...'
+        Invoke-FlutterPubGet
+        Invoke-Tool 'flutter' (@('build', 'web', "--$Configuration") + $flutterVersionArgs + @($flutterDefine) + $FlutterArgs)
+        $webBundle = Join-Path $root 'build\web'
+        if (-not (Test-Path $webBundle)) {
+            throw "Web bundle was not found: $webBundle"
+        }
+        Compress-Archive -Path (Join-Path $webBundle '*') -DestinationPath (Join-Path $outputPath "motchiy-todo-web-$($buildVersion.Package).zip") -Force
     }
-    Compress-Archive -Path (Join-Path $webBundle '*') -DestinationPath (Join-Path $outputPath "motchiy-todo-web-$($buildVersion.Package).zip") -Force
 
     Write-Host "Build completed: $outputPath"
 }
