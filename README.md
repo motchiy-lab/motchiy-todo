@@ -92,6 +92,10 @@ Copy-Item config\google_oauth.json.example config\google_oauth.json
 クライアントIDを設定してください。このファイルはGit管理対象外です。デスクトップ
 アプリは公開クライアントとしてPKCEを使用するため、クライアントシークレットは設定
 しません。
+「Webアプリケーション」用のクライアントIDでは、ログイン時に
+`client_secret is missing` エラーになります。Google Cloud Consoleの「クライアント」
+から「デスクトップ アプリ」タイプのOAuthクライアントを作成し、そのクライアントIDを
+設定してください。
 Google OAuthのリダイレクトURIには、アプリが使用する次のループバック形式を許可します。
 
 ```text

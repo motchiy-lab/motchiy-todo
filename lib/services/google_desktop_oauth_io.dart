@@ -108,6 +108,14 @@ class GoogleDesktopOAuth {
           if (error is String) error,
           if (description is String) description,
         ].join(': ');
+        if (detail.toLowerCase().contains('client_secret is missing')) {
+          throw StateError(
+            'Google OAuthクライアントの種類が正しくありません。'
+            'Google Cloud Consoleで「デスクトップ アプリ」用のOAuthクライアントIDを作成し、'
+            'config/google_oauth.jsonのGOOGLE_DESKTOP_CLIENT_IDを置き換えて再ビルドしてください。'
+            'デスクトップアプリにクライアントシークレットは設定しないでください。',
+          );
+        }
         throw StateError(
           'Googleトークンの取得に失敗しました'
           '${detail.isEmpty ? '' : ' ($detail)'}',
