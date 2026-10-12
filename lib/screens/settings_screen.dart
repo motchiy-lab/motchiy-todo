@@ -6,6 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../main.dart';
 import '../services/auth_service.dart';
+import '../services/desktop_window_service.dart';
+import '../services/startup_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -22,6 +24,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
+
+  bool get _isDesktop =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.linux);
+
+  bool get _supportsStartup =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.linux);
 
   DocumentReference<Map<String, dynamic>> get _settingsDocument =>
       FirebaseFirestore.instance
@@ -59,6 +72,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {});
   }
 
+  Future<void> _changeCloseToTray(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('close_to_tray', enabled);
+    await DesktopWindowService.instance.setCloseToTray(enabled);
+    desktopCloseToTrayNotifier.value = enabled;
+  }
+
+  Future<void> _changeStartup(bool enabled) async {
+    try {
+      await StartupService.instance.setEnabled(enabled);
+      desktopStartupNotifier.value = enabled;
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('自動起動の設定を変更できませんでした: $error')),
+        );
+      }
+    }
+  }
+
   Future<void> _refreshSettings() async {
     if (_isRefreshing) return;
     setState(() => _isRefreshing = true);
@@ -69,6 +102,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ThemeMode.values[prefs.getInt('theme_mode_index') ?? 0];
       enableTabAnimationsNotifier.value =
           prefs.getBool('enable_tab_animations') ?? true;
+      desktopCloseToTrayNotifier.value =
+          prefs.getBool('close_to_tray') ?? false;
+      if (_supportsStartup) {
+        desktopStartupNotifier.value =
+            await StartupService.instance.initialize();
+      }
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('設定を再読み込みしました')));
@@ -274,6 +313,78 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const SizedBox(height: 8),
                   _buildAccountSection(colorScheme, isDark),
+                  if (_isDesktop) ...[
+                    const SizedBox(height: 32),
+                    const Text(
+                      'ウィンドウを閉じたとき',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '閉じるボタンを押したときの動作を選択できます',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                    ),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: desktopCloseToTrayNotifier,
+                      builder: (context, closeToTray, child) => RadioGroup<bool>(
+                        groupValue: closeToTray,
+                        onChanged: (value) {
+                          if (value != null) _changeCloseToTray(value);
+                        },
+                        child: const Column(
+                          children: [
+                            RadioListTile<bool>(
+                              contentPadding: EdgeInsets.zero,
+                              value: false,
+                              title: Text('アプリを終了する'),
+                              subtitle: Text('閉じるとアプリを終了します'),
+                            ),
+                            RadioListTile<bool>(
+                              contentPadding: EdgeInsets.zero,
+                              value: true,
+                              title: Text('タスクトレイに格納する'),
+                              subtitle: Text(
+                                'アプリを終了せず、タスクトレイから再表示できます',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (_supportsStartup) ...[
+                    const SizedBox(height: 24),
+                    const Text(
+                      'スタートアップ',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'OSへのサインイン時にアプリを起動します',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                    ),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: desktopStartupNotifier,
+                      builder: (context, enabled, child) => SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('OSとともに起動する'),
+                        value: enabled,
+                        onChanged: _changeStartup,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 32),
                   const Text(
                     'カラーテーマ',

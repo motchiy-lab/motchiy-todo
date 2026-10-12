@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'screens/auth_gate.dart';
+import 'services/desktop_window_service.dart';
+import 'services/startup_service.dart';
 
 final List<Color> appThemes = [
   const Color(0xFF5C8374), // セージグリーン
@@ -54,9 +56,16 @@ void main() async {
 
   enableTabAnimationsNotifier.value =
       prefs.getBool('enable_tab_animations') ?? true;
+  final closeToTray = prefs.getBool('close_to_tray') ?? false;
+  desktopCloseToTrayNotifier.value = closeToTray;
 
   if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
     await windowManager.ensureInitialized();
+    await DesktopWindowService.instance.initialize(closeToTray: closeToTray);
+    if (Platform.isWindows || Platform.isLinux) {
+      desktopStartupNotifier.value =
+          await StartupService.instance.initialize();
+    }
     WindowOptions windowOptions = const WindowOptions(
       minimumSize: Size(400, 500),
       center: true,
