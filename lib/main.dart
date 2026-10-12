@@ -1,14 +1,12 @@
-import 'dart:io';
-
-import 'firebase_options.dart';
-
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'dart:io';
+
 import 'screens/auth_gate.dart';
+import 'services/auth_service.dart';
 import 'services/desktop_window_service.dart';
 import 'services/startup_service.dart';
 
@@ -41,11 +39,9 @@ final ValueNotifier<bool> enableTabAnimationsNotifier = ValueNotifier<bool>(
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    await AuthService.instance.initialize();
   } catch (e) {
-    debugPrint('Firebase init failed: $e');
+    debugPrint('Could not restore API session: $e');
   }
   final prefs = await SharedPreferences.getInstance();
   themeIndexNotifier.value = prefs.getInt('theme_color_index') ?? 0;
@@ -63,8 +59,7 @@ void main() async {
     await windowManager.ensureInitialized();
     await DesktopWindowService.instance.initialize(closeToTray: closeToTray);
     if (Platform.isWindows || Platform.isLinux) {
-      desktopStartupNotifier.value =
-          await StartupService.instance.initialize();
+      desktopStartupNotifier.value = await StartupService.instance.initialize();
     }
     WindowOptions windowOptions = const WindowOptions(
       minimumSize: Size(400, 500),

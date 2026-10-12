@@ -1,11 +1,10 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/api_service.dart';
+import '../services/auth_service.dart';
+import '../services/task_cache_service.dart';
 import '../models/task.dart';
 
 extension DateTimeExt on DateTime {
@@ -40,12 +39,6 @@ class CalendarScreenState extends State<CalendarScreen> {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
-  CollectionReference<Map<String, dynamic>> get _taskCollection =>
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(FirebaseAuth.instance.currentUser!.uid)
-          .collection('tasks');
-
   @override
   void initState() {
     super.initState();
@@ -56,37 +49,46 @@ class CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _loadTasks() async {
+    final userId = AuthService.instance.currentUser?.id;
+    if (userId == null) return;
     final prefs = await SharedPreferences.getInstance();
     final bool hintDismissed =
         prefs.getBool('calendar_hint_dismissed') ?? false;
     List<Task> loadedTasks = [];
+    final cache = TaskCacheService.instance;
+    List<Task>? cachedTasks;
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(FirebaseAuth.instance.currentUser!.uid)
-          .collection('tasks')
-          .get();
-      loadedTasks = snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return Task.fromJson(data);
-      }).toList();
-    } catch (_) {
-      final tasksString = prefs.getString('tasks_key');
-      if (tasksString != null) {
-        try {
-          final List<dynamic> decoded = jsonDecode(tasksString);
-          loadedTasks = decoded.map((item) => Task.fromJson(item)).toList();
-        } catch (_) {}
+      cachedTasks = await cache.readTasks(userId);
+    } on FormatException catch (error) {
+      debugPrint('Ignoring invalid local task cache: $error');
+      await cache.clearTasks(userId);
+    }
+    try {
+      if (await cache.hasPendingSync(userId) && cachedTasks != null) {
+        await ApiService.instance.replaceTasks(cachedTasks);
+        if (AuthService.instance.currentUser?.id != userId) return;
+        await cache.markSynced(userId);
+        loadedTasks = cachedTasks;
+      } else {
+        loadedTasks = await ApiService.instance.getTasks();
+        if (AuthService.instance.currentUser?.id != userId) return;
+        if (loadedTasks.isNotEmpty) {
+          await cache.saveRemoteTasks(userId, loadedTasks);
+        } else {
+          loadedTasks = cachedTasks ?? [];
+          await cache.saveLocalTasks(userId, loadedTasks);
+          await ApiService.instance.replaceTasks(loadedTasks);
+          if (AuthService.instance.currentUser?.id != userId) return;
+          await cache.markSynced(userId);
+        }
       }
+    } catch (error) {
+      if (AuthService.instance.currentUser?.id != userId) return;
+      debugPrint('Could not load tasks from API; using local cache: $error');
+      loadedTasks = cachedTasks ?? [];
+      await cache.saveLocalTasks(userId, loadedTasks);
     }
-    if (loadedTasks.isEmpty && prefs.getString('tasks_key') != null) {
-      try {
-        final tasksString = prefs.getString('tasks_key')!;
-        final List<dynamic> decoded = jsonDecode(tasksString);
-        loadedTasks = decoded.map((item) => Task.fromJson(item)).toList();
-      } catch (_) {}
-    }
+
     setState(() {
       _showHint = !hintDismissed;
       _tasks = loadedTasks;
@@ -106,22 +108,21 @@ class CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-  Future<void> _saveTasks({String? deletedTaskId}) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String encoded = jsonEncode(_tasks.map((t) => t.toJson()).toList());
-    await prefs.setString('tasks_key', encoded);
+  Future<void> _saveTasks() async {
+    final userId = AuthService.instance.currentUser?.id;
+    if (userId == null) return;
+    final tasks = List<Task>.of(_tasks);
+    final cache = TaskCacheService.instance;
+    await cache.saveLocalTasks(userId, tasks);
+    if (AuthService.instance.currentUser?.id != userId) return;
 
     try {
-      final batch = FirebaseFirestore.instance.batch();
-      for (final task in _tasks) {
-        batch.set(_taskCollection.doc(task.id), task.toJson());
-      }
-      if (deletedTaskId != null) {
-        batch.delete(_taskCollection.doc(deletedTaskId));
-      }
-      await batch.commit();
-    } catch (_) {
-      // Keep the local copy when offline; it will be available as a fallback.
+      await ApiService.instance.replaceTasks(tasks);
+      await cache.markSynced(userId);
+    } catch (error) {
+      debugPrint(
+        'Could not save tasks to API; local cache was retained: $error',
+      );
     }
   }
 
@@ -265,7 +266,7 @@ class CalendarScreenState extends State<CalendarScreen> {
     setState(() {
       _tasks.removeWhere((t) => t.id == task.id);
     });
-    _saveTasks(deletedTaskId: task.id);
+    _saveTasks();
   }
 
   Future<void> _createTaskForRange(DateTime start, DateTime end) async {

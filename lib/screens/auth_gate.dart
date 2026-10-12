@@ -1,9 +1,9 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
+import '../models/app_user.dart';
+import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import 'main_screen.dart';
 
@@ -12,38 +12,44 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: AuthService().authStateChanges,
+    final authService = AuthService.instance;
+    return StreamBuilder<AppUser?>(
+      stream: authService.authStateChanges,
+      initialData: authService.currentUser,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
         return snapshot.data == null
             ? const SignInScreen()
-            : _SettingsLoader(user: snapshot.data!);
+            : _SettingsLoader(key: ValueKey(snapshot.data!.id));
       },
     );
   }
 }
 
-class _SettingsLoader extends StatelessWidget {
-  final User user;
+class _SettingsLoader extends StatefulWidget {
+  const _SettingsLoader({super.key});
 
-  const _SettingsLoader({required this.user});
+  @override
+  State<_SettingsLoader> createState() => _SettingsLoaderState();
+}
+
+class _SettingsLoaderState extends State<_SettingsLoader> {
+  late final Future<void> _settingsLoad = _load();
 
   Future<void> _load() async {
-    final snapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-    final settings = snapshot.data()?['settings'];
-    if (settings is! Map) return;
     final prefs = await SharedPreferences.getInstance();
-    final themeColor = settings['themeColorIndex'];
-    final themeMode = settings['themeModeIndex'];
-    final enableTabAnimations = settings['enableTabAnimations'];
+    Map<String, dynamic> settings = {};
+    try {
+      settings = await ApiService.instance.getSettings();
+    } on ApiException catch (error) {
+      debugPrint('Could not load API settings; using local settings: $error');
+    }
+    final themeColor =
+        settings['themeColorIndex'] ?? prefs.getInt('theme_color_index');
+    final themeMode =
+        settings['themeModeIndex'] ?? prefs.getInt('theme_mode_index');
+    final enableTabAnimations =
+        settings['enableTabAnimations'] ??
+        prefs.getBool('enable_tab_animations');
     if (themeColor is int) {
       themeIndexNotifier.value = themeColor;
       await prefs.setInt('theme_color_index', themeColor);
@@ -63,7 +69,7 @@ class _SettingsLoader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<void>(
-      future: _load(),
+      future: _settingsLoad,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(
@@ -90,7 +96,7 @@ class _SignInScreenState extends State<SignInScreen> {
   Future<void> _signIn() async {
     if (!AuthService.isGoogleSignInSupported) {
       setState(() {
-        _error = 'Windows版ではGoogleログインを利用できません。Web版またはモバイル版をご利用ください。';
+        _error = 'この環境ではGoogleログインを利用できません。';
       });
       return;
     }
@@ -100,7 +106,7 @@ class _SignInScreenState extends State<SignInScreen> {
       _error = null;
     });
     try {
-      await AuthService().signInWithGoogle();
+      await AuthService.instance.signInWithGoogle();
     } catch (error) {
       if (mounted) {
         setState(() => _error = error.toString());

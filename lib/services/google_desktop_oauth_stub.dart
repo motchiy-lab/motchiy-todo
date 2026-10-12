@@ -1,5 +1,5 @@
 class GoogleDesktopOAuth {
-  static Future<Map<String, String>> authenticate(String clientId) {
+  static Future<dynamic> authenticate({required bool forceAccountSelection}) {
     throw UnsupportedError('デスクトップOAuthはこのプラットフォームでは利用できません。');
   }
 }

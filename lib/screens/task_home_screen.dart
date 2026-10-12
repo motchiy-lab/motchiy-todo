@@ -1,13 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/api_service.dart';
+import '../services/auth_service.dart';
+import '../services/task_cache_service.dart';
 import '../models/task.dart';
 
 class TaskHomeScreen extends StatefulWidget {
@@ -30,12 +27,6 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
-
-  CollectionReference<Map<String, dynamic>> get _taskCollection =>
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(FirebaseAuth.instance.currentUser!.uid)
-          .collection('tasks');
 
   @override
   void initState() {
@@ -102,86 +93,85 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
   }
 
   Future<void> _loadTasks() async {
+    final userId = AuthService.instance.currentUser?.id;
+    if (userId == null) return;
+    final cache = TaskCacheService.instance;
+    List<Task>? cachedTasks;
     try {
-      final snapshot = await _taskCollection.get();
-      if (snapshot.docs.isNotEmpty && !snapshot.metadata.isFromCache) {
-        setState(() {
-          _tasks = snapshot.docs.map((doc) {
-            final data = doc.data();
-            data['id'] = doc.id;
-            return Task.fromJson(data);
-          }).toList();
-          _isLoading = false;
-        });
+      cachedTasks = await cache.readTasks(userId);
+    } on FormatException catch (error) {
+      debugPrint('Ignoring invalid local task cache: $error');
+      await cache.clearTasks(userId);
+    }
+    try {
+      if (await cache.hasPendingSync(userId) && cachedTasks != null) {
+        await ApiService.instance.replaceTasks(cachedTasks);
+        if (AuthService.instance.currentUser?.id != userId) return;
+        await cache.markSynced(userId);
+        _setLoadedTasks(cachedTasks);
+        return;
+      }
+      final remoteTasks = await ApiService.instance.getTasks();
+      if (AuthService.instance.currentUser?.id != userId) return;
+      if (remoteTasks.isNotEmpty) {
+        await cache.saveRemoteTasks(userId, remoteTasks);
+        _setLoadedTasks(remoteTasks);
       } else {
-        // Firestoreが空の場合はローカルから読み込むかデフォルトを作成
-        final prefs = await SharedPreferences.getInstance();
-        final String? tasksString = prefs.getString('tasks_key');
-        if (tasksString != null) {
-          final List<dynamic> decoded = jsonDecode(tasksString);
-          setState(() {
-            _tasks = decoded.map((item) => Task.fromJson(item)).toList();
-            _isLoading = false;
-          });
-          await _saveTasks();
-        } else {
-          setState(() {
-            _tasks = [
+        final tasks =
+            cachedTasks ??
+            [
               Task(
                 id: DateTime.now().millisecondsSinceEpoch.toString(),
                 title: '',
               ),
             ];
-            _isLoading = false;
-          });
-        }
+        _setLoadedTasks(tasks);
+        await cache.saveLocalTasks(userId, tasks);
+        await ApiService.instance.replaceTasks(tasks);
+        if (AuthService.instance.currentUser?.id != userId) return;
+        await cache.markSynced(userId);
       }
-    } catch (e) {
-      // オフライン時などはローカルにフォールバック
-      final prefs = await SharedPreferences.getInstance();
-      final String? tasksString = prefs.getString('tasks_key');
-      if (tasksString != null) {
-        final List<dynamic> decoded = jsonDecode(tasksString);
-        setState(() {
-          _tasks = decoded.map((item) => Task.fromJson(item)).toList();
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _tasks = [
+    } catch (error) {
+      if (AuthService.instance.currentUser?.id != userId) return;
+      debugPrint('Could not load tasks from API; using local cache: $error');
+      final fallback =
+          cachedTasks ??
+          [
             Task(
               id: DateTime.now().millisecondsSinceEpoch.toString(),
               title: '',
             ),
           ];
-          _isLoading = false;
-        });
-      }
+      await cache.saveLocalTasks(userId, fallback);
+      _setLoadedTasks(fallback);
     }
   }
 
-  Future<void> _saveTasks({String? deletedTaskId}) async {
+  void _setLoadedTasks(List<Task> tasks) {
+    if (!mounted) return;
+    setState(() {
+      _tasks = tasks;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _saveTasks() async {
+    final userId = AuthService.instance.currentUser?.id;
+    if (userId == null) return;
     final tasks = List<Task>.of(_tasks);
 
     Future<void> writeTasks() async {
-      // ローカルにも保存
-      final encoded = jsonEncode(tasks.map((t) => t.toJson()).toList());
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('tasks_key', encoded);
+      final cache = TaskCacheService.instance;
+      await cache.saveLocalTasks(userId, tasks);
+      if (AuthService.instance.currentUser?.id != userId) return;
 
-      // Firestoreに保存
       try {
-        final batch = FirebaseFirestore.instance.batch();
-        for (final task in tasks) {
-          final ref = _taskCollection.doc(task.id);
-          batch.set(ref, task.toJson());
-        }
-        if (deletedTaskId != null) {
-          batch.delete(_taskCollection.doc(deletedTaskId));
-        }
-        await batch.commit();
-      } catch (_) {
-        // オフライン時はローカル保存を維持し、次回オンライン時に再試行する。
+        await ApiService.instance.replaceTasks(tasks);
+        await cache.markSynced(userId);
+      } catch (error) {
+        debugPrint(
+          'Could not save tasks to API; local cache was retained: $error',
+        );
       }
     }
 
@@ -321,7 +311,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
       _controllers.remove(task.id)?.dispose();
       _focusNodes.remove(task.id)?.dispose();
     });
-    _saveTasks(deletedTaskId: task.id);
+    _saveTasks();
 
     if (_tasks.isEmpty) {
       _addTaskAtEnd();

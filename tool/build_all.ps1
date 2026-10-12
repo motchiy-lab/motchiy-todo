@@ -219,7 +219,7 @@ function New-MsixLogo {
 }
 
 function Invoke-LinuxBuild {
-    $linuxArgs = @('build', 'linux', "--$Configuration", "--dart-define-from-file=$configPath")
+    $linuxArgs = @('build', 'linux', "--$Configuration")
     if ($FlutterArgs) {
         $linuxArgs += $FlutterArgs
     }
@@ -236,12 +236,10 @@ function Invoke-LinuxBuild {
         }
 
         $wslRoot = "/mnt/$($Matches[1].ToLower())/$($Matches[2] -replace '\\', '/')"
-        $wslConfig = "$wslRoot/config/google_oauth.json"
         $escapedRoot = $wslRoot.Replace("'", "'\''")
-        $escapedConfig = $wslConfig.Replace("'", "'\''")
         $linuxFlutter = '/home/motchiy/development/flutter/bin/flutter'
         Invoke-Tool $wsl.Source @('bash', '-lc', "test -x '$linuxFlutter' || { echo 'WSL Flutter was not found at $linuxFlutter. Install Flutter in WSL.' >&2; exit 1; }; cd '$escapedRoot' && '$linuxFlutter' pub get")
-        $flutterCommand = "cd '$escapedRoot' && '$linuxFlutter' build linux --$Configuration --build-name='$buildVersion.Name' --build-number='$buildVersion.Number' --dart-define-from-file='$escapedConfig'"
+        $flutterCommand = "cd '$escapedRoot' && '$linuxFlutter' build linux --$Configuration --build-name='$buildVersion.Name' --build-number='$buildVersion.Number'"
         if ($FlutterArgs) {
             $flutterCommand += ' ' + (($FlutterArgs | ForEach-Object {
                 "'" + $_.Replace("'", "'\''") + "'"
@@ -260,7 +258,6 @@ function Invoke-FlutterPubGet {
 }
 
 $root = Split-Path -Parent $PSScriptRoot
-$configPath = Join-Path $root 'config\google_oauth.json'
 $platformsConfigPath = Join-Path $PSScriptRoot 'build_platforms.json'
 $outputPath = [IO.Path]::GetFullPath((Join-Path $root $OutputDirectory))
 $buildVersion = Get-Version $Version
@@ -305,23 +302,18 @@ if ($selectedPlatforms.Count -eq 0) {
     throw "No platforms are selected in $platformsConfigPath."
 }
 
-if (-not (Test-Path $configPath)) {
-    throw "Missing $configPath. Copy config\google_oauth.json.example and fill in the OAuth credentials."
-}
-
 Write-Host "Selected platforms: $($selectedPlatforms -join ', ')"
 New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
 Get-ChildItem $outputPath -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
 
 Push-Location $root
 try {
-    $flutterDefine = "--dart-define-from-file=config/google_oauth.json"
     $flutterVersionArgs = @('--build-name', $buildVersion.Name, '--build-number', "$($buildVersion.Number)")
 
     if ($selectedPlatforms -contains 'windows') {
         Write-Host 'Building Windows bundle...'
         Invoke-FlutterPubGet
-        $windowsArgs = @('build', 'windows', "--$Configuration") + $flutterVersionArgs + @($flutterDefine) + $FlutterArgs
+        $windowsArgs = @('build', 'windows', "--$Configuration") + $flutterVersionArgs + $FlutterArgs
         Invoke-Tool 'flutter' $windowsArgs
 
         $windowsBundle = Join-Path $root "build\windows\x64\runner\$($Configuration.Substring(0, 1).ToUpper() + $Configuration.Substring(1))"
@@ -389,7 +381,7 @@ try {
     if ($selectedPlatforms -contains 'android') {
         Write-Host 'Building Android APK...'
         Invoke-FlutterPubGet
-        Invoke-Tool 'flutter' (@('build', 'apk', "--$Configuration") + $flutterVersionArgs + @($flutterDefine) + $FlutterArgs)
+        Invoke-Tool 'flutter' (@('build', 'apk', "--$Configuration") + $flutterVersionArgs + $FlutterArgs)
         $apk = Join-Path $root "build\app\outputs\flutter-apk\app-$Configuration.apk"
         if (-not (Test-Path $apk)) {
             throw "APK was not found: $apk"
@@ -423,7 +415,7 @@ try {
     if ($selectedPlatforms -contains 'web') {
         Write-Host 'Building web bundle...'
         Invoke-FlutterPubGet
-        Invoke-Tool 'flutter' (@('build', 'web', "--$Configuration") + $flutterVersionArgs + @($flutterDefine) + $FlutterArgs)
+        Invoke-Tool 'flutter' (@('build', 'web', "--$Configuration") + $flutterVersionArgs + $FlutterArgs)
         $webBundle = Join-Path $root 'build\web'
         if (-not (Test-Path $webBundle)) {
             throw "Web bundle was not found: $webBundle"

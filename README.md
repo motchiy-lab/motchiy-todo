@@ -1,8 +1,8 @@
 # Motchiy ToDo
 
 Flutterで作成したタスク管理アプリです。Windows、Android、Linux、Webに対応しています。
-タスクと認証にはFirebaseを利用し、WindowsではGoogleのデスクトップOAuth（PKCE）で
-ログインします。
+認証とデータ同期には設定可能なREST APIを利用します。APIサーバーは利用者が用意し、
+Googleログインの検証とユーザーごとのデータ分離を行います。
 
 ## ダウンロードして利用する
 
@@ -79,32 +79,62 @@ flutter config --enable-linux-desktop
 flutter pub get
 ```
 
-## FirebaseとGoogle OAuthの設定
+## REST APIの設定と契約
 
-このリポジトリにはOAuthの実値を保存しません。開発または自分でビルドしたアプリで
-Googleログインを使うには、まず設定ファイルを作成します。
+APIの接続先は `lib/config/api_config.dart` の `apiBaseUrl` で指定します。
+初期値は未設定を示す `https://api.example.com` です。実際のAPIをデプロイしてから、
+HTTPSのベースURLに置き換えてアプリをビルドしてください。開発時は `localhost` と
+`127.0.0.1` のHTTPも利用できます。同ファイルの `googleOAuthClientId` には公開可能な
+Google OAuth WebクライアントIDを設定し、APIサーバー側でもそのIDを許可 audience として
+設定してください。このアプリにはクライアントシークレットを含めません。
 
-```powershell
-Copy-Item config\google_oauth.json.example config\google_oauth.json
+APIはGoogle IDトークンを検証し、以降のリクエストをAPI発行のBearerトークンで認証します。
+デスクトップ版はAPIが開始するブラウザ認証とPKCEを利用し、APIサーバー側にGoogle OAuthの
+Webクライアントシークレットを保管してください。Android、iOS、Web版ではGoogle
+Sign-Inから取得したIDトークンをAPIへ送ります。APIは署名、発行者、有効期限、および
+許可済みのクライアント audience を必ず検証してください。すべてのデータエンドポイントは
+BearerトークンのユーザーIDでデータ範囲を決定し、クライアント指定のユーザーIDを信頼して
+はいけません。Web版を使う場合、アプリの配信元からのCORS preflightとJSON、
+`Authorization` ヘッダーを許可してください。
+
+実装されているAPI契約は次のとおりです。すべてJSONを使用し、エラー応答は
+`{ "message": "..." }` とします。
+
+| Method | Path | Request / response |
+| --- | --- | --- |
+| POST | `/auth/google` | `{ "idToken": "..." }` を受け取り、ログイン応答を返す |
+| POST | `/auth/google/desktop/start` | `{ "redirectUri": "http://127.0.0.1:<port>/callback", "state": "...", "codeChallenge": "...", "codeChallengeMethod": "S256", "forceAccountSelection": false }` を受け取り、`{ "authorizationUrl": "https://..." }` を返す |
+| POST | `/auth/google/desktop/exchange` | `{ "code": "...", "codeVerifier": "...", "redirectUri": "http://127.0.0.1:<port>/callback" }` を受け取り、ログイン応答を返す |
+| POST | `/auth/refresh` | `{ "refreshToken": "..." }` を受け取り、新しいログイン応答を返す |
+| POST | `/auth/logout` | 現在のBearerトークンを失効させる |
+| GET | `/tasks` | `{ "tasks": [...] }` を返す |
+| PUT | `/tasks` | `{ "tasks": [...] }` でログイン中ユーザーの全タスクを置き換える |
+| GET | `/settings` | ログイン中ユーザーの設定オブジェクトを返す |
+| PATCH | `/settings` | 指定された設定項目を部分更新する |
+
+ログイン、更新APIの成功応答は次の形です。
+
+```json
+{
+  "accessToken": "API access token",
+  "refreshToken": "API refresh token",
+  "expiresIn": 900,
+  "user": {
+    "id": "server-owned user id",
+    "email": "user@example.com",
+    "displayName": "User",
+    "photoUrl": null
+  }
+}
 ```
 
-`config/google_oauth.json` にGoogle Cloud Consoleで作成したデスクトップアプリの
-クライアントIDを設定してください。このファイルはGit管理対象外です。デスクトップ
-アプリは公開クライアントとしてPKCEを使用するため、クライアントシークレットは設定
-しません。
-「Webアプリケーション」用のクライアントIDでは、ログイン時に
-`client_secret is missing` エラーになります。Google Cloud Consoleの「クライアント」
-から「デスクトップ アプリ」タイプのOAuthクライアントを作成し、そのクライアントIDを
-設定してください。
-Google OAuthのリダイレクトURIには、アプリが使用する次のループバック形式を許可します。
-
-```text
-http://127.0.0.1:<空きポート>
-```
-
-クライアントIDは `--dart-define-from-file` でビルド成果物へ埋め込まれますが、
-クライアントシークレットは成果物へ含めないでください。変更後は必ず再ビルドして
-ください。
+タスクは `id`、`title`、`description`、`isCompleted`、`startDate`、`dueDate`、
+`completedAt`、`hasDueDate` を持つオブジェクトです。設定には
+`themeColorIndex`、`themeModeIndex`、`enableTabAnimations` を使用します。
+端末内のタスクキャッシュはユーザーごとに保存され、未同期の変更は次回の起動または
+再読み込み時にAPIへ再送されます。以前の
+Firebase/Firestore上のデータは自動移行されないため、必要な場合は別途エクスポートして
+API側へ移行してください。
 
 ## 起動と個別ビルド
 
@@ -118,15 +148,14 @@ Windowsで起動する場合:
 
 ```powershell
 .\tool\build_windows.ps1
-flutter build apk --release --dart-define-from-file=config/google_oauth.json
-flutter build web --release --dart-define-from-file=config/google_oauth.json
+flutter build apk --release
+flutter build web --release
 ```
 
 Linux版はLinux環境で次のようにビルドできます。
 
 ```bash
-flutter build linux --release \
-  --dart-define-from-file=config/google_oauth.json
+flutter build linux --release
 ```
 
 ## プラットフォームを選択したビルド
@@ -190,13 +219,13 @@ linux/     Linux固有設定
 web/       Web固有設定
 windows/   Windows固有設定
 tool/      起動・ビルド用PowerShellスクリプト
-config/    OAuth設定のサンプル
+lib/config/ API接続先設定
 ```
 
 ## ライセンス
 
 このプロジェクトは [MIT License](LICENSE) の下で公開しています。
 
-このプロジェクトが使用しているFlutter、Dart、Firebaseなどの依存ライブラリには、
+このプロジェクトが使用しているFlutter、Dartなどの依存ライブラリには、
 それぞれのライセンスが適用されます。再配布時は各依存ライブラリのライセンスも
 確認してください。

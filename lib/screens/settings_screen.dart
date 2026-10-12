@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 import '../main.dart';
+import '../models/app_user.dart';
+import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/desktop_window_service.dart';
 import '../services/startup_service.dart';
@@ -36,23 +36,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
       (defaultTargetPlatform == TargetPlatform.windows ||
           defaultTargetPlatform == TargetPlatform.linux);
 
-  DocumentReference<Map<String, dynamic>> get _settingsDocument =>
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(FirebaseAuth.instance.currentUser!.uid);
-
-  Future<void> _saveCloudSettings(Map<String, dynamic> settings) async {
-    await _settingsDocument.set({
-      'settings': settings,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+  Future<void> _saveApiSettings(Map<String, dynamic> settings) async {
+    try {
+      await ApiService.instance.patchSettings(settings);
+    } catch (error) {
+      debugPrint('Could not save settings to API: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('設定をサーバーに同期できませんでした: $error')));
+      }
+    }
   }
 
   Future<void> _changeTheme(int index) async {
     themeIndexNotifier.value = index;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('theme_color_index', index);
-    await _saveCloudSettings({'themeColorIndex': index});
+    await _saveApiSettings({'themeColorIndex': index});
     setState(() {});
   }
 
@@ -60,7 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     themeModeNotifier.value = mode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('theme_mode_index', mode.index);
-    await _saveCloudSettings({'themeModeIndex': mode.index});
+    await _saveApiSettings({'themeModeIndex': mode.index});
     setState(() {});
   }
 
@@ -68,7 +69,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     enableTabAnimationsNotifier.value = enabled;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('enable_tab_animations', enabled);
-    await _saveCloudSettings({'enableTabAnimations': enabled});
+    await _saveApiSettings({'enableTabAnimations': enabled});
     setState(() {});
   }
 
@@ -85,9 +86,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       desktopStartupNotifier.value = enabled;
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('自動起動の設定を変更できませんでした: $error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('自動起動の設定を変更できませんでした: $error')));
       }
     }
   }
@@ -97,16 +98,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _isRefreshing = true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      themeIndexNotifier.value = prefs.getInt('theme_color_index') ?? 0;
-      themeModeNotifier.value =
-          ThemeMode.values[prefs.getInt('theme_mode_index') ?? 0];
-      enableTabAnimationsNotifier.value =
-          prefs.getBool('enable_tab_animations') ?? true;
+      Map<String, dynamic> settings = {};
+      try {
+        settings = await ApiService.instance.getSettings();
+      } on ApiException catch (error) {
+        debugPrint('Could not refresh API settings: $error');
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('サーバー設定を取得できませんでした: $error')));
+        }
+      }
+      final themeIndex =
+          settings['themeColorIndex'] ?? prefs.getInt('theme_color_index');
+      final themeModeIndex =
+          settings['themeModeIndex'] ?? prefs.getInt('theme_mode_index');
+      final animations =
+          settings['enableTabAnimations'] ??
+          prefs.getBool('enable_tab_animations');
+      if (themeIndex is int) {
+        themeIndexNotifier.value = themeIndex;
+        await prefs.setInt('theme_color_index', themeIndex);
+      }
+      if (themeModeIndex is int &&
+          themeModeIndex >= 0 &&
+          themeModeIndex < ThemeMode.values.length) {
+        themeModeNotifier.value = ThemeMode.values[themeModeIndex];
+        await prefs.setInt('theme_mode_index', themeModeIndex);
+      }
+      if (animations is bool) {
+        enableTabAnimationsNotifier.value = animations;
+        await prefs.setBool('enable_tab_animations', animations);
+      }
+      setState(() {});
       desktopCloseToTrayNotifier.value =
           prefs.getBool('close_to_tray') ?? false;
       if (_supportsStartup) {
-        desktopStartupNotifier.value =
-            await StartupService.instance.initialize();
+        desktopStartupNotifier.value = await StartupService.instance
+            .initialize();
       }
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -120,8 +149,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _switchAccount() async {
     setState(() => _isAccountActionRunning = true);
     try {
-      final authService = AuthService();
-      await authService.switchGoogleAccount();
+      await AuthService.instance.switchGoogleAccount();
     } on StateError catch (error) {
       if (error.message == 'Googleログインがキャンセルされました') {
         return;
@@ -161,11 +189,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (shouldSignOut != true) return;
-    await AuthService().signOut();
+    await AuthService.instance.signOut();
   }
 
   Widget _buildAccountSection(ColorScheme colorScheme, bool isDark) {
-    final currentUser = FirebaseAuth.instance.currentUser;
+    final currentUser = AuthService.instance.currentUser;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -188,7 +216,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: ListTile(
               leading: _buildAccountAvatar(currentUser),
               title: Text(currentUser.displayName ?? 'Googleアカウント'),
-              subtitle: Text(currentUser.email ?? ''),
+              subtitle: Text(currentUser.email),
               trailing: const Icon(Icons.check_circle),
             ),
           ),
@@ -234,13 +262,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildAccountAvatar(User user) {
+  Widget _buildAccountAvatar(AppUser user) {
     return CircleAvatar(
-      backgroundImage: user.photoURL == null
+      backgroundImage: user.photoUrl == null
           ? null
-          : NetworkImage(user.photoURL!),
-      child: user.photoURL == null
-          ? Text((user.email ?? '?').substring(0, 1).toUpperCase())
+          : NetworkImage(user.photoUrl!),
+      child: user.photoUrl == null
+          ? Text(
+              user.email.isEmpty
+                  ? '?'
+                  : user.email.substring(0, 1).toUpperCase(),
+            )
           : null,
     );
   }
@@ -332,30 +364,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     ValueListenableBuilder<bool>(
                       valueListenable: desktopCloseToTrayNotifier,
-                      builder: (context, closeToTray, child) => RadioGroup<bool>(
-                        groupValue: closeToTray,
-                        onChanged: (value) {
-                          if (value != null) _changeCloseToTray(value);
-                        },
-                        child: const Column(
-                          children: [
-                            RadioListTile<bool>(
-                              contentPadding: EdgeInsets.zero,
-                              value: false,
-                              title: Text('アプリを終了する'),
-                              subtitle: Text('閉じるとアプリを終了します'),
+                      builder: (context, closeToTray, child) =>
+                          RadioGroup<bool>(
+                            groupValue: closeToTray,
+                            onChanged: (value) {
+                              if (value != null) _changeCloseToTray(value);
+                            },
+                            child: const Column(
+                              children: [
+                                RadioListTile<bool>(
+                                  contentPadding: EdgeInsets.zero,
+                                  value: false,
+                                  title: Text('アプリを終了する'),
+                                  subtitle: Text('閉じるとアプリを終了します'),
+                                ),
+                                RadioListTile<bool>(
+                                  contentPadding: EdgeInsets.zero,
+                                  value: true,
+                                  title: Text('タスクトレイに格納する'),
+                                  subtitle: Text('アプリを終了せず、タスクトレイから再表示できます'),
+                                ),
+                              ],
                             ),
-                            RadioListTile<bool>(
-                              contentPadding: EdgeInsets.zero,
-                              value: true,
-                              title: Text('タスクトレイに格納する'),
-                              subtitle: Text(
-                                'アプリを終了せず、タスクトレイから再表示できます',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                          ),
                     ),
                   ],
                   if (_supportsStartup) ...[
