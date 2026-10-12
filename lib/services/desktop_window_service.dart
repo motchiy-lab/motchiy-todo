@@ -83,6 +83,7 @@ class DesktopWindowService extends WindowListener {
       menu.addItem(showItem);
       menu.addSeparator();
       menu.addItem(quitItem);
+      trayIcon.setContextMenuTrigger(ContextMenuTrigger.rightClicked);
       trayIcon.setContextMenu(menu);
       trayIcon.setTooltip('Motchiy ToDo');
     }

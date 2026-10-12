@@ -17,6 +17,7 @@ namespace {
 #endif
 
 constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
+constexpr UINT kActivateExistingInstanceMessage = WM_APP + 1;
 
 /// Registry key for app theme preference.
 ///
@@ -179,6 +180,11 @@ Win32Window::MessageHandler(HWND hwnd,
                             WPARAM const wparam,
                             LPARAM const lparam) noexcept {
   switch (message) {
+    case kActivateExistingInstanceMessage:
+      ShowWindow(hwnd, SW_RESTORE);
+      SetForegroundWindow(hwnd);
+      return 0;
+
     case WM_DESTROY:
       window_handle_ = nullptr;
       Destroy();
