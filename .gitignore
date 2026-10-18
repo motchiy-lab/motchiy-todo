@@ -34,7 +34,6 @@ migrate_working_dir/
 /coverage/
 
 # Server secrets and dependencies
-/config/google_oauth.json
 .env
 .env.*
 !.env.example

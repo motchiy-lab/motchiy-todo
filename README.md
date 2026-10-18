@@ -263,12 +263,16 @@ Flutterアプリへ埋め込んではいけません。アプリに埋め込む�
 
 リリースビルドにはデプロイ済みHTTPS APIのベースURL（例: `https://todo-api.example.com`）が必須です。
 APIはドメイン直下のパスで公開します。プレースホルダーURLのままでは
-ビルドできないようにしてあり、API URLはコンパイル時にアプリへ埋め込まれます。Windowsで
-選択中のWindows、Android、Linux向け成果物を作る例:
+ビルドできないようにしてあり、API URLは `tool/build_platforms.json` の `apiBaseUrl` に
+設定します。URLはコンパイル時にアプリへ埋め込まれます。Windowsで選択中のWindows、
+Android、Linux向け成果物を作る例:
 
 ```powershell
-.\tool\build.ps1 -ApiBaseUrl https://todo-api.example.com
+.\tool\build.ps1
 ```
+
+`tool/build_platforms.json` の `apiBaseUrl` に実際のHTTPS API URLを書き込んでください。
+コマンドライン引数 `-ApiBaseUrl` を指定した場合は、ファイルの設定より優先されます。
 
 既定ではMSIX、APK、Linux tar.gzを `dist/` に作成します。`tool/build_platforms.json` の
 `platforms` 配列で対象を選びます。Windows MSIXは開発用自己署名証明書で署名され、
@@ -308,6 +312,7 @@ Flutter環境を用意してAPI URL付きでビルドできます。各配布物
 
 ```json
 {
+  "apiBaseUrl": "https://todo-api.example.com",
   "platforms": [
     "windows",
     "android"

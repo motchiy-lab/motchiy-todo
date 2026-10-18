@@ -265,30 +265,13 @@ function Invoke-FlutterPubGet {
 }
 
 $root = Split-Path -Parent $PSScriptRoot
-$platformsConfigPath = Join-Path $PSScriptRoot 'build_platforms.json'
+$platformsConfigPath = Join-Path $PSScriptRoot 'build.json'
 $outputPath = [IO.Path]::GetFullPath((Join-Path $root $OutputDirectory))
 $rootPrefix = [IO.Path]::GetFullPath($root) + [IO.Path]::DirectorySeparatorChar
 if (-not $outputPath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'OutputDirectory must be a directory inside the repository.'
 }
 $buildVersion = Get-Version $Version
-
-if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
-    throw 'ApiBaseUrl is required for a distributable build. Pass the deployed HTTPS API URL with -ApiBaseUrl.'
-}
-$parsedApiBaseUrl = $null
-if (
-    -not [Uri]::TryCreate($ApiBaseUrl.TrimEnd('/'), [UriKind]::Absolute, [ref]$parsedApiBaseUrl) -or
-    $parsedApiBaseUrl.Scheme -ne 'https' -or
-    [string]::IsNullOrWhiteSpace($parsedApiBaseUrl.Host) -or
-    $parsedApiBaseUrl.UserInfo -or
-    $parsedApiBaseUrl.Query -or
-    $parsedApiBaseUrl.Fragment
-) {
-    throw 'ApiBaseUrl must be an HTTPS URL without credentials, query, or fragment.'
-}
-$ApiBaseUrl = $parsedApiBaseUrl.AbsoluteUri.TrimEnd('/')
-$apiDefineArgs = @("--dart-define=API_BASE_URL=$ApiBaseUrl")
 
 if (-not (Test-Path $platformsConfigPath)) {
     throw "Missing build platform configuration: $platformsConfigPath"
@@ -304,6 +287,29 @@ catch {
 if ($null -eq $platformsConfig.platforms -or $platformsConfig.platforms -isnot [array]) {
     throw "The platforms property in $platformsConfigPath must be a JSON array."
 }
+
+if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
+    if ($platformsConfig.apiBaseUrl -isnot [string]) {
+        throw "The apiBaseUrl property in $platformsConfigPath must be a string."
+    }
+    $ApiBaseUrl = $platformsConfig.apiBaseUrl
+}
+if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
+    throw 'ApiBaseUrl is required. Set apiBaseUrl in tool/build.json or pass -ApiBaseUrl.'
+}
+$parsedApiBaseUrl = $null
+if (
+    -not [Uri]::TryCreate($ApiBaseUrl.TrimEnd('/'), [UriKind]::Absolute, [ref]$parsedApiBaseUrl) -or
+    $parsedApiBaseUrl.Scheme -ne 'https' -or
+    [string]::IsNullOrWhiteSpace($parsedApiBaseUrl.Host) -or
+    $parsedApiBaseUrl.UserInfo -or
+    $parsedApiBaseUrl.Query -or
+    $parsedApiBaseUrl.Fragment
+) {
+    throw 'ApiBaseUrl must be an HTTPS URL without credentials, query, or fragment.'
+}
+$ApiBaseUrl = $parsedApiBaseUrl.AbsoluteUri.TrimEnd('/')
+$apiDefineArgs = @("--dart-define=API_BASE_URL=$ApiBaseUrl")
 
 $validPlatforms = @('windows', 'android', 'linux', 'web')
 $platformsToBuild = if ($Platforms) { $Platforms } else { $platformsConfig.platforms }
