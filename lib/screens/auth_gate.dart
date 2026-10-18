@@ -91,22 +91,49 @@ class SignInScreen extends StatefulWidget {
 
 class _SignInScreenState extends State<SignInScreen> {
   bool _isSigningIn = false;
+  bool _isRegistering = false;
+  bool _needsEmailVerification = false;
   String? _error;
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _displayNameController = TextEditingController();
+  final _verificationCodeController = TextEditingController();
 
-  Future<void> _signIn() async {
-    if (!AuthService.isGoogleSignInSupported) {
-      setState(() {
-        _error = 'この環境ではGoogleログインを利用できません。';
-      });
-      return;
-    }
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _displayNameController.dispose();
+    _verificationCodeController.dispose();
+    super.dispose();
+  }
 
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
     setState(() {
       _isSigningIn = true;
       _error = null;
     });
     try {
-      await AuthService.instance.signInWithGoogle();
+      if (_isRegistering) {
+        await AuthService.instance.register(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          displayName: _displayNameController.text.trim(),
+        );
+        if (mounted) {
+          setState(() {
+            _needsEmailVerification = true;
+            _error = null;
+          });
+        }
+      } else {
+        await AuthService.instance.signIn(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+      }
     } catch (error) {
       if (mounted) {
         setState(() => _error = error.toString());
@@ -116,51 +143,249 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
+  Future<void> _verifyEmail() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _isSigningIn = true;
+      _error = null;
+    });
+    try {
+      await AuthService.instance.verifyEmail(
+        email: _emailController.text.trim(),
+        code: _verificationCodeController.text.trim(),
+      );
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _isSigningIn = false);
+    }
+  }
+
+  Future<void> _resendVerificationCode() async {
+    setState(() {
+      _isSigningIn = true;
+      _error = null;
+    });
+    try {
+      await AuthService.instance.resendVerificationCode(
+        email: _emailController.text.trim(),
+      );
+      if (mounted) {
+        setState(() => _error = '確認コードを再送信しました。メールをご確認ください。');
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _isSigningIn = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.task_alt, size: 64),
-                const SizedBox(height: 20),
-                const Text(
-                  'Motchiy ToDo',
-                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                const Text('Googleアカウントでログインして、タスクと設定を同期します。'),
-                const SizedBox(height: 28),
-                FilledButton.icon(
-                  onPressed:
-                      _isSigningIn || !AuthService.isGoogleSignInSupported
-                      ? null
-                      : _signIn,
-                  icon: const Icon(Icons.login),
-                  label: Text(
-                    !AuthService.isGoogleSignInSupported
-                        ? 'この環境では利用できません'
-                        : _isSigningIn
-                        ? 'ログイン中...'
-                        : 'Googleでログイン',
-                  ),
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    _error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.task_alt, size: 64),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Motchiy ToDo',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ],
+                    const SizedBox(height: 12),
+                    Text(
+                      _needsEmailVerification
+                          ? 'メールに届いた6桁の確認コードを入力してください。'
+                          : _isRegistering
+                          ? 'アカウントを作成してタスクと設定を同期します。'
+                          : 'メールアドレスでログインしてタスクと設定を同期します。',
+                    ),
+                    const SizedBox(height: 28),
+                    Form(
+                      key: _formKey,
+                      child: Column(
+                        children: [
+                          if (_needsEmailVerification) ...[
+                            TextFormField(
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                              autofillHints: const [AutofillHints.email],
+                              decoration: const InputDecoration(
+                                labelText: 'メールアドレス',
+                                border: OutlineInputBorder(),
+                              ),
+                              validator: (value) {
+                                if (value == null ||
+                                    !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+                                        .hasMatch(value.trim())) {
+                                  return '有効なメールアドレスを入力してください。';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _verificationCodeController,
+                              keyboardType: TextInputType.number,
+                              autofillHints: const [AutofillHints.oneTimeCode],
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) => _verifyEmail(),
+                              decoration: const InputDecoration(
+                                labelText: '確認コード',
+                                border: OutlineInputBorder(),
+                              ),
+                              validator: (value) {
+                                if (value == null ||
+                                    !RegExp(r'^\d{6}$')
+                                        .hasMatch(value.trim())) {
+                                  return 'メールに届いた6桁のコードを入力してください。';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 20),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                onPressed: _isSigningIn ? null : _verifyEmail,
+                                icon: const Icon(Icons.verified_user),
+                                label: Text(
+                                  _isSigningIn ? '確認中...' : 'メールアドレスを確認',
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: _isSigningIn
+                                  ? null
+                                  : _resendVerificationCode,
+                              child: const Text('確認コードを再送信'),
+                            ),
+                          ] else if (_isRegistering) ...[
+                            TextFormField(
+                              controller: _displayNameController,
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(
+                                labelText: '表示名',
+                                border: OutlineInputBorder(),
+                              ),
+                              validator: (value) {
+                                if (_isRegistering &&
+                                    (value == null || value.trim().isEmpty)) {
+                                  return '表示名を入力してください。';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          if (!_needsEmailVerification) ...[
+                            TextFormField(
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                              autofillHints: const [AutofillHints.email],
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(
+                                labelText: 'メールアドレス',
+                                border: OutlineInputBorder(),
+                              ),
+                              validator: (value) {
+                                if (value == null ||
+                                    !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+                                        .hasMatch(value.trim())) {
+                                  return '有効なメールアドレスを入力してください。';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _passwordController,
+                              obscureText: true,
+                              autofillHints: [
+                                _isRegistering
+                                    ? AutofillHints.newPassword
+                                    : AutofillHints.password,
+                              ],
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) => _submit(),
+                              decoration: const InputDecoration(
+                                labelText: 'パスワード',
+                                border: OutlineInputBorder(),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'パスワードを入力してください。';
+                                }
+                                if (_isRegistering && value.length < 12) {
+                                  return '12文字以上で入力してください。';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 20),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                onPressed: _isSigningIn ? null : _submit,
+                                icon: const Icon(Icons.login),
+                                label: Text(
+                                  _isSigningIn
+                                      ? '処理中...'
+                                      : _isRegistering
+                                      ? 'アカウントを作成'
+                                      : 'ログイン',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        _error!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                    if (!_needsEmailVerification)
+                      TextButton(
+                        onPressed: _isSigningIn
+                            ? null
+                            : () => setState(() {
+                                _isRegistering = !_isRegistering;
+                                _error = null;
+                              }),
+                        child: Text(
+                          _isRegistering
+                              ? 'すでにアカウントをお持ちの方はログイン'
+                              : 'アカウントをお持ちでない方はこちら',
+                        ),
+                      ),
+                    if (!_needsEmailVerification && !_isRegistering)
+                      TextButton(
+                        onPressed: () => setState(() {
+                          _needsEmailVerification = true;
+                          _error = null;
+                        }),
+                        child: const Text('メール確認コードを入力'),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

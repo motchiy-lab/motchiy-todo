@@ -33,8 +33,12 @@ migrate_working_dir/
 /build/
 /coverage/
 
-# Local OAuth credentials
+# Server secrets and dependencies
 /config/google_oauth.json
+.env
+.env.*
+!.env.example
+node_modules/
 
 # Symbolication related
 app.*.symbols
@@ -52,3 +56,4 @@ app.*.map.json
 
 # 配布フォルダの除外
 dist/
+server/

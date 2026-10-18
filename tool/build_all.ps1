@@ -5,7 +5,14 @@ param(
 
     [string]$OutputDirectory = 'dist',
 
+    [switch]$CleanOutputDirectory,
+
     [string]$Version,
+
+    [string]$ApiBaseUrl,
+
+    [ValidateSet('windows', 'android', 'linux', 'web')]
+    [string[]]$Platforms,
 
     [string]$CertificateThumbprint,
 
@@ -219,7 +226,7 @@ function New-MsixLogo {
 }
 
 function Invoke-LinuxBuild {
-    $linuxArgs = @('build', 'linux', "--$Configuration")
+    $linuxArgs = @('build', 'linux', "--$Configuration") + $flutterVersionArgs + $apiDefineArgs
     if ($FlutterArgs) {
         $linuxArgs += $FlutterArgs
     }
@@ -239,7 +246,7 @@ function Invoke-LinuxBuild {
         $escapedRoot = $wslRoot.Replace("'", "'\''")
         $linuxFlutter = '/home/motchiy/development/flutter/bin/flutter'
         Invoke-Tool $wsl.Source @('bash', '-lc', "test -x '$linuxFlutter' || { echo 'WSL Flutter was not found at $linuxFlutter. Install Flutter in WSL.' >&2; exit 1; }; cd '$escapedRoot' && '$linuxFlutter' pub get")
-        $flutterCommand = "cd '$escapedRoot' && '$linuxFlutter' build linux --$Configuration --build-name='$buildVersion.Name' --build-number='$buildVersion.Number'"
+        $flutterCommand = "cd '$escapedRoot' && '$linuxFlutter' build linux --$Configuration --build-name='$($buildVersion.Name)' --build-number='$($buildVersion.Number)' --dart-define=API_BASE_URL='$($ApiBaseUrl.Replace("'", "'\''"))'"
         if ($FlutterArgs) {
             $flutterCommand += ' ' + (($FlutterArgs | ForEach-Object {
                 "'" + $_.Replace("'", "'\''") + "'"
@@ -260,7 +267,29 @@ function Invoke-FlutterPubGet {
 $root = Split-Path -Parent $PSScriptRoot
 $platformsConfigPath = Join-Path $PSScriptRoot 'build_platforms.json'
 $outputPath = [IO.Path]::GetFullPath((Join-Path $root $OutputDirectory))
+$rootPrefix = [IO.Path]::GetFullPath($root) + [IO.Path]::DirectorySeparatorChar
+if (-not $outputPath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'OutputDirectory must be a directory inside the repository.'
+}
 $buildVersion = Get-Version $Version
+
+if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
+    throw 'ApiBaseUrl is required for a distributable build. Pass the deployed HTTPS API URL with -ApiBaseUrl.'
+}
+$parsedApiBaseUrl = $null
+if (
+    -not [Uri]::TryCreate($ApiBaseUrl.TrimEnd('/'), [UriKind]::Absolute, [ref]$parsedApiBaseUrl) -or
+    $parsedApiBaseUrl.Scheme -ne 'https' -or
+    [string]::IsNullOrWhiteSpace($parsedApiBaseUrl.Host) -or
+    $parsedApiBaseUrl.AbsolutePath -ne '/' -or
+    $parsedApiBaseUrl.UserInfo -or
+    $parsedApiBaseUrl.Query -or
+    $parsedApiBaseUrl.Fragment
+) {
+    throw 'ApiBaseUrl must be an HTTPS origin URL without a path, credentials, query, or fragment.'
+}
+$ApiBaseUrl = $parsedApiBaseUrl.AbsoluteUri.TrimEnd('/')
+$apiDefineArgs = @("--dart-define=API_BASE_URL=$ApiBaseUrl")
 
 if (-not (Test-Path $platformsConfigPath)) {
     throw "Missing build platform configuration: $platformsConfigPath"
@@ -278,8 +307,9 @@ if ($null -eq $platformsConfig.platforms -or $platformsConfig.platforms -isnot [
 }
 
 $validPlatforms = @('windows', 'android', 'linux', 'web')
+$platformsToBuild = if ($Platforms) { $Platforms } else { $platformsConfig.platforms }
 $selectedPlatforms = @()
-foreach ($platform in $platformsConfig.platforms) {
+foreach ($platform in $platformsToBuild) {
     if ($platform -isnot [string] -or [string]::IsNullOrWhiteSpace($platform)) {
         throw "Platform names in $platformsConfigPath must be non-empty strings."
     }
@@ -303,8 +333,18 @@ if ($selectedPlatforms.Count -eq 0) {
 }
 
 Write-Host "Selected platforms: $($selectedPlatforms -join ', ')"
-New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
-Get-ChildItem $outputPath -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+if (Test-Path $outputPath) {
+    $existingOutput = @(Get-ChildItem $outputPath -Force)
+    if ($existingOutput.Count -gt 0 -and -not $CleanOutputDirectory) {
+        throw "OutputDirectory is not empty: $outputPath. Choose a new directory or pass -CleanOutputDirectory to remove its contents."
+    }
+    if ($existingOutput.Count -gt 0) {
+        Remove-Item (Join-Path $outputPath '*') -Recurse -Force
+    }
+}
+else {
+    New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
+}
 
 Push-Location $root
 try {
@@ -313,7 +353,7 @@ try {
     if ($selectedPlatforms -contains 'windows') {
         Write-Host 'Building Windows bundle...'
         Invoke-FlutterPubGet
-        $windowsArgs = @('build', 'windows', "--$Configuration") + $flutterVersionArgs + $FlutterArgs
+        $windowsArgs = @('build', 'windows', "--$Configuration") + $flutterVersionArgs + $apiDefineArgs + $FlutterArgs
         Invoke-Tool 'flutter' $windowsArgs
 
         $windowsBundle = Join-Path $root "build\windows\x64\runner\$($Configuration.Substring(0, 1).ToUpper() + $Configuration.Substring(1))"
@@ -326,6 +366,9 @@ try {
         New-Item -ItemType Directory -Path $msixStaging -Force | Out-Null
         try {
             Copy-Item (Join-Path $windowsBundle '*') $msixStaging -Recurse -Force
+            Get-ChildItem $msixStaging -File -Recurse |
+                Where-Object { $_.Extension -in @('.lib', '.exp') } |
+                Remove-Item -Force
             $logo = Join-Path $root 'assets\windows_app_icon.png'
             New-MsixLogo $logo (Join-Path $msixStaging 'logo-150.png') 150
             New-MsixLogo $logo (Join-Path $msixStaging 'logo-44.png') 44
@@ -381,7 +424,7 @@ try {
     if ($selectedPlatforms -contains 'android') {
         Write-Host 'Building Android APK...'
         Invoke-FlutterPubGet
-        Invoke-Tool 'flutter' (@('build', 'apk', "--$Configuration") + $flutterVersionArgs + $FlutterArgs)
+        Invoke-Tool 'flutter' (@('build', 'apk', "--$Configuration") + $flutterVersionArgs + $apiDefineArgs + $FlutterArgs)
         $apk = Join-Path $root "build\app\outputs\flutter-apk\app-$Configuration.apk"
         if (-not (Test-Path $apk)) {
             throw "APK was not found: $apk"
@@ -403,7 +446,7 @@ try {
         try {
             Copy-Item (Join-Path $linuxBundle '*') $linuxStaging -Recurse -Force
             $tarPath = Join-Path $outputPath "motchiy-todo-linux-$($buildVersion.Package).tar.gz"
-            Invoke-Tool 'tar.exe' @('-czf', $tarPath, '-C', $linuxStaging, 'motchiy_todo', 'data')
+            Invoke-Tool 'tar.exe' @('-czf', $tarPath, '-C', $linuxStaging, 'motchiy_todo', 'data', 'lib')
         }
         finally {
             if (Test-Path $linuxStaging) {
@@ -415,7 +458,7 @@ try {
     if ($selectedPlatforms -contains 'web') {
         Write-Host 'Building web bundle...'
         Invoke-FlutterPubGet
-        Invoke-Tool 'flutter' (@('build', 'web', "--$Configuration") + $flutterVersionArgs + $FlutterArgs)
+        Invoke-Tool 'flutter' (@('build', 'web', "--$Configuration") + $flutterVersionArgs + $apiDefineArgs + $FlutterArgs)
         $webBundle = Join-Path $root 'build\web'
         if (-not (Test-Path $webBundle)) {
             throw "Web bundle was not found: $webBundle"

@@ -1,8 +1,9 @@
 # Motchiy ToDo
 
 Flutterで作成したタスク管理アプリです。Windows、Android、Linux、Webに対応しています。
-認証とデータ同期には設定可能なREST APIを利用します。APIサーバーは利用者が用意し、
-Googleログインの検証とユーザーごとのデータ分離を行います。
+メールアドレスとパスワードによる認証、およびタスク・設定の同期にはMongoDBを使うREST
+APIを利用します。`server/` にはGinルーターから呼び出すGoハンドラーを含みます。
+FirebaseとGoogleログインは使用しません。
 
 ## ダウンロードして利用する
 
@@ -38,7 +39,7 @@ MSIXはWindows 10/11向けです。`tool\build_all.ps1` は初回ビルド時に
 
 ### Linux
 
-Linux版は実行ファイルと `data/` を同じディレクトリに置いたまま使用します。
+Linux版は実行ファイル、`data/`、`lib/` を同じディレクトリ構成に置いたまま使用します。
 
 ```bash
 tar -xzf motchiy-todo-linux-<version>.tar.gz
@@ -62,7 +63,7 @@ ZIPを展開し、`index.html` を含むファイル一式を静的ファイル�
 - Git
 - Windows開発時: Visual Studio with Desktop development with C++
 - Android開発時: Android StudioとAndroid SDK
-- Linux開発時: clang、CMake、Ninja、GTK 3開発パッケージ
+- Linux開発時: clang、CMake、Ninja、GTK 3、`libsecret-1-dev` の開発パッケージ
 - Web開発時: ChromeまたはChromium
 
 Flutterの対応バージョンは、`pubspec.yaml` のSDK制約を満たすものを使用してください。
@@ -79,40 +80,120 @@ flutter config --enable-linux-desktop
 flutter pub get
 ```
 
-## REST APIの設定と契約
+## Go/MongoDB APIハンドラー
 
-APIの接続先は `lib/config/api_config.dart` の `apiBaseUrl` で指定します。
-初期値は未設定を示す `https://api.example.com` です。実際のAPIをデプロイしてから、
-HTTPSのベースURLに置き換えてアプリをビルドしてください。開発時は `localhost` と
-`127.0.0.1` のHTTPも利用できます。同ファイルの `googleOAuthClientId` には公開可能な
-Google OAuth WebクライアントIDを設定し、APIサーバー側でもそのIDを許可 audience として
-設定してください。このアプリにはクライアントシークレットを含めません。
+`server/` はサーバー起動処理やルート登録を含まないGoパッケージです。Ginのルーターは
+利用者側で作成し、公開されたハンドラーを `r.GET()`、`r.POST()`、`r.PUT()`、`r.PATCH()` に
+登録してください。Go 1.23以降、MongoDB、および登録時の確認コード送信用SMTPサーバーが
+必要です。MongoDB Atlas等に専用DBユーザーを作成し、接続文字列と32バイト以上のJWT秘密鍵を
+サーバー環境のシークレットとして設定してください。
 
-APIはGoogle IDトークンを検証し、以降のリクエストをAPI発行のBearerトークンで認証します。
-デスクトップ版はAPIが開始するブラウザ認証とPKCEを利用し、APIサーバー側にGoogle OAuthの
-Webクライアントシークレットを保管してください。Android、iOS、Web版ではGoogle
-Sign-Inから取得したIDトークンをAPIへ送ります。APIは署名、発行者、有効期限、および
-許可済みのクライアント audience を必ず検証してください。すべてのデータエンドポイントは
-BearerトークンのユーザーIDでデータ範囲を決定し、クライアント指定のユーザーIDを信頼して
-はいけません。Web版を使う場合、アプリの配信元からのCORS preflightとJSON、
-`Authorization` ヘッダーを許可してください。
+```powershell
+cd server
+go mod tidy
+```
 
-実装されているAPI契約は次のとおりです。すべてJSONを使用し、エラー応答は
-`{ "message": "..." }` とします。
+ハンドラーを作成し、起動時にMongoDBのインデックスを用意したあと、必要なルートへ登録します。
+以下はルート登録の例です。実際のAPIサーバーの起動・ルーティングはこのリポジトリには含みません。
 
-| Method | Path | Request / response |
-| --- | --- | --- |
-| POST | `/auth/google` | `{ "idToken": "..." }` を受け取り、ログイン応答を返す |
-| POST | `/auth/google/desktop/start` | `{ "redirectUri": "http://127.0.0.1:<port>/callback", "state": "...", "codeChallenge": "...", "codeChallengeMethod": "S256", "forceAccountSelection": false }` を受け取り、`{ "authorizationUrl": "https://..." }` を返す |
-| POST | `/auth/google/desktop/exchange` | `{ "code": "...", "codeVerifier": "...", "redirectUri": "http://127.0.0.1:<port>/callback" }` を受け取り、ログイン応答を返す |
-| POST | `/auth/refresh` | `{ "refreshToken": "..." }` を受け取り、新しいログイン応答を返す |
-| POST | `/auth/logout` | 現在のBearerトークンを失効させる |
-| GET | `/tasks` | `{ "tasks": [...] }` を返す |
-| PUT | `/tasks` | `{ "tasks": [...] }` でログイン中ユーザーの全タスクを置き換える |
-| GET | `/settings` | ログイン中ユーザーの設定オブジェクトを返す |
-| PATCH | `/settings` | 指定された設定項目を部分更新する |
+```go
+import api "github.com/motchiy-lab/motchiy-todo/server"
 
-ログイン、更新APIの成功応答は次の形です。
+handlers, err := api.NewHandlers(api.Config{
+    Database: database,
+    JWTSecret: os.Getenv("JWT_SECRET"),
+    Mailer: api.SMTPMailer{
+        Host: os.Getenv("SMTP_HOST"), Port: os.Getenv("SMTP_PORT"),
+        Username: os.Getenv("SMTP_USER"), Password: os.Getenv("SMTP_PASSWORD"),
+        From: os.Getenv("EMAIL_FROM"),
+    },
+})
+if err != nil { log.Fatal(err) }
+if err := handlers.EnsureIndexes(ctx); err != nil { log.Fatal(err) }
+
+r.GET("/health", handlers.Health)
+r.POST("/auth/register", handlers.Register)
+r.POST("/auth/verify-email", handlers.VerifyEmail)
+r.POST("/auth/verification/resend", handlers.ResendVerification)
+r.POST("/auth/login", handlers.Login)
+r.POST("/auth/refresh", handlers.Refresh)
+r.POST("/auth/logout", handlers.AuthMiddleware(), handlers.Logout)
+r.GET("/tasks", handlers.AuthMiddleware(), handlers.GetTasks)
+r.PUT("/tasks", handlers.AuthMiddleware(), handlers.PutTasks)
+r.GET("/settings", handlers.AuthMiddleware(), handlers.GetSettings)
+r.PATCH("/settings", handlers.AuthMiddleware(), handlers.PatchSettings)
+```
+
+`MONGODB_URI`、`JWT_SECRET`、SMTPの`SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、
+`SMTP_PASSWORD`、`EMAIL_FROM`をAPIホスト側で設定します。SMTPはSTARTTLS対応の送信先を
+利用してください。ログイン・登録・メール確認の各ルートには、APIサーバー側でIPおよび
+アカウント単位のレート制限も設定してください。Web版を配信する場合は、実際の配信元だけを
+許可するCORSを設定します。
+
+公開環境ではAPIをHTTPSで公開し、MongoDBへのアクセスをAPIサーバーからのみに制限してください。
+接続文字列と秘密鍵をソース管理・アプリ・配布アーカイブに含めず、ホスティング環境の
+シークレット管理機能に保管します。DBは専用の最小権限アカウントを使い、バックアップと
+復旧手順も用意します。
+
+### REST APIの契約
+
+OpenAPI 3.1形式の仕様は [`server/openapi.yaml`](server/openapi.yaml) にあります。
+ルート実装・クライアント生成・APIクライアントとの契約確認に利用できます。
+
+アプリに設定するベースURL配下に、次のJSON APIを実装します。認証以外のデータAPIには
+すべて `Authorization: Bearer <accessToken>` を要求します。成功時のログイン応答は
+`accessToken`（15分の有効期限）、`refreshToken`、`expiresIn`（秒）、`user`（`id`、
+`email`、`displayName`、`photoUrl`）を含むJSONです。エラーは
+`{ "message": "..." }` 形式にします。空の成功応答はHTTP 204を返します。
+
+| Method / path | 要件 |
+| --- | --- |
+| `POST /auth/register` | `{ "email", "password", "displayName" }` を受け取り、メールを正規化して一意性を検証する。パスワードは12文字以上128バイト以下。ソルト付きscrypt等の適切なパスワードハッシュで保存し、6桁の確認コードをメール送信する。確認完了まではデータAPIへログインさせない。HTTP 202を返す。 |
+| `POST /auth/verify-email` | `{ "email", "code" }` を受け取り、期限（15分）内の確認コードをサーバー秘密鍵付きHMACハッシュと定数時間比較で検証する。失敗回数を制限し、成功時はコードを無効化してログイン応答を返す。 |
+| `POST /auth/verification/resend` | `{ "email" }` を受け取り未確認アカウントのコードを再送する。アカウントの有無を応答で判別できないようにし、IP・アカウント単位で制限する。 |
+| `POST /auth/login` | `{ "email", "password" }` を検証する。メール未確認または資格情報不一致では認証せず、短時間の試行回数制限を適用する。 |
+| `POST /auth/refresh` | `{ "refreshToken" }` を検証し、古いトークンを一度だけ使えるよう失効・ローテーションして新しいログイン応答を返す。DBにはトークンそのものではなくハッシュを保存する。 |
+| `POST /auth/logout` | 認証中セッションだけを失効させる。 |
+| `GET /tasks` | 認証中ユーザーの `{ "tasks": [...] }` を返す。 |
+| `PUT /tasks` | `{ "tasks": [...] }` で認証中ユーザーのタスク一覧だけを置き換える。 |
+| `GET /settings` | 認証中ユーザーの設定を返す。未保存時は `themeColorIndex: 0`、`themeModeIndex: 0`、`enableTabAnimations: true` を返す。 |
+| `PATCH /settings` | 許可された設定項目だけを認証中ユーザーの設定へ部分更新する。 |
+| `GET /health` | APIの稼働状況を返す。監視にDB接続確認が必要な場合はReadiness用の確認も実装する。 |
+
+アクセストークンは署名・有効期限・issuer・audienceを検証し、その `sub` と有効なサーバー側
+セッションからユーザーを特定します。セッション失効もデータAPIごとに反映してください。
+クライアントから送られた `userId`、メールアドレス、表示名をデータ所有者の決定に使っては
+いけません。タスクと設定のすべての読み書きは、認証済みユーザーIDをMongoDBクエリに含めて
+実行します。ユーザーIDをリクエスト本文から選択できる設計や、全件取得後にアプリ側で
+フィルターする設計は禁止です。
+
+MongoDBにはユーザー（メールアドレス一意、パスワードハッシュ、確認状態）、認証セッション
+（ユーザーID、リフレッシュトークンハッシュ、有効期限、失効日時）、ユーザーごとのタスク
+一覧、ユーザーごとの設定を保存します。ユーザーごとに一意なデータ所有キーを設けます。
+タスクは `id`、`title`、`description`、`isCompleted`、`startDate`、`dueDate`、
+`completedAt`、`hasDueDate` の項目のみを受け付け、ユーザーIDなどの余分な項目は拒否します。
+設定は `themeColorIndex`（0〜5）、`themeModeIndex`（0〜2）、
+`enableTabAnimations`（boolean）のみを受け付けます。
+
+Webアプリを配信する場合、CORSでは実際の配信オリジンだけを許可し、JSONと
+`Authorization` ヘッダーのpreflightを処理します。認証情報やMongoDB接続文字列を
+Flutterアプリへ埋め込んではいけません。アプリに埋め込むのは公開API URLだけです。
+
+### 認証とデータ分離
+
+アカウント作成には表示名、メールアドレス、12文字以上のパスワードが必要です。登録先へ
+送信された6桁のコードを確認するまでログインできません。コードは15分で失効し、確認試行
+回数にも制限があります。確認画面を閉じた場合はログイン画面から確認コード入力へ戻れます。
+パスワードはサーバーでscryptを使ってソルト付きハッシュとして保存し、ログイン時に短命な
+署名付きアクセストークンと、ハッシュだけをDBへ保存するローテーション式リフレッシュ
+トークンを発行します。ログアウトすると該当セッションが失効します。
+
+各リクエストの利用者IDは検証済みアクセストークンの `sub` とサーバー上の有効な
+セッションからのみ取得します。タスクや設定のAPIは、リクエスト本文にユーザーIDがあっても
+受け付けず、DB検索・更新は認証済みユーザーIDに限定します。アカウント間のアクセス制御を
+クライアント側の値やメールアドレスに依存させません。
+
+ログイン・メール確認APIの成功応答は次の形です。
 
 ```json
 {
@@ -132,37 +213,51 @@ BearerトークンのユーザーIDでデータ範囲を決定し、クライア
 `completedAt`、`hasDueDate` を持つオブジェクトです。設定には
 `themeColorIndex`、`themeModeIndex`、`enableTabAnimations` を使用します。
 端末内のタスクキャッシュはユーザーごとに保存され、未同期の変更は次回の起動または
-再読み込み時にAPIへ再送されます。以前の
-Firebase/Firestore上のデータは自動移行されないため、必要な場合は別途エクスポートして
-API側へ移行してください。
+再読み込み時にAPIへ再送されます。以前に別の保存先を使っていた場合、そのデータは自動
+移行されません。
 
-## 起動と個別ビルド
+## 配布用ビルド
 
-Windowsで起動する場合:
-
-```powershell
-.\tool\run_windows.ps1
-```
-
-個別にビルドする場合:
+リリースビルドにはデプロイ済みHTTPS APIのオリジンURL（例: `https://todo-api.example.com`）が必須です。
+パスを含むURLではなく、サーバーをルートパスにマウントしてください。プレースホルダーURLのままでは
+ビルドできないようにしてあり、API URLはコンパイル時にアプリへ埋め込まれます。Windowsで
+選択中のWindows、Android、Linux向け成果物を作る例:
 
 ```powershell
-.\tool\build_windows.ps1
-flutter build apk --release
-flutter build web --release
+.\tool\build_all.ps1 -ApiBaseUrl https://todo-api.example.com
 ```
 
-Linux版はLinux環境で次のようにビルドできます。
+既定ではMSIX、APK、Linux tar.gzを `dist/` に作成します。`tool/build_platforms.json` の
+`platforms` 配列で対象を選びます。Windows MSIXは開発用自己署名証明書で署名され、
+`motchiy-todo-publisher.cer` が出力されます。受け取る側はインストール前に発行者証明書を
+信頼する必要があります。広く配布する場合は、Windows署名証明書を用意してください。
+Android APKは現在のGradle設定により開発用署名で作成されます。直接配布・試用はできますが、
+Google Playや継続的な本番アップデートには専用のリリース署名鍵と本番用アプリIDを設定して
+ください。署名鍵は安全にバックアップし、リポジトリや配布物に含めないでください。
 
-```bash
-flutter build linux --release
+Windows用Flutterバンドルだけを作る場合:
+
+```powershell
+.\tool\build_windows.ps1 -ApiBaseUrl https://todo-api.example.com
 ```
+
+APKまたはWeb版をFlutterから個別にビルドする場合は、同じAPI URLを渡してください。
+
+```powershell
+flutter build apk --release --dart-define=API_BASE_URL=https://todo-api.example.com
+flutter build web --release --dart-define=API_BASE_URL=https://todo-api.example.com
+```
+
+Linux版もLinux/WSLにFlutter環境を用意してAPI URL付きでビルドできます。各配布物の接続先を
+変えるには、API URLを指定し直して再ビルドが必要です。
 
 ## プラットフォームを選択したビルド
 
 ビルドするプラットフォームは `tool/build_platforms.json` で選択できます。
 `platforms` 配列に `windows`、`android`、`linux`、`web` のうち必要なものを指定してください。
-初期設定では全プラットフォームをビルドします。たとえばWindowsとAndroidだけにする場合:
+初期設定ではWindows、Android、Linuxをビルドします。たとえばWindowsとAndroidだけに
+する場合は次のように設定します。一時的にコマンドラインで対象を上書きする場合は
+`-Platforms windows,android` のようにも指定できます。
 
 ```json
 {
@@ -173,10 +268,14 @@ flutter build linux --release
 }
 ```
 
-WindowsのPowerShellから、設定されたプラットフォームをまとめてビルドできます。
+WindowsのPowerShellから、設定されたプラットフォームをまとめてビルドできます。出力先は
+既定で `dist/` です。スクリプトは既存成果物を削除しないため、空の出力先を指定するか、
+内容を確認したうえで `-CleanOutputDirectory` を明示してください。
 
 ```powershell
-.\tool\build_all.ps1
+.\tool\build_all.ps1 `
+  -ApiBaseUrl https://todo-api.example.com `
+  -OutputDirectory dist\release-2.0.0
 ```
 
 成果物は `dist/` に出力されます。Windows版を選択する場合は、Windows SDKの
@@ -186,7 +285,10 @@ Linux用Flutterをインストールし、`/home/motchiy/development/flutter/bin
 選択されていてもその実行ではLinux版を省略できます。
 
 ```powershell
-.\tool\build_all.ps1 -SkipLinux
+.\tool\build_all.ps1 `
+  -ApiBaseUrl https://todo-api.example.com `
+  -OutputDirectory dist\release-2.0.0 `
+  -SkipLinux
 ```
 
 バージョンを指定する場合は `-Version` を使います。`1.2.3+4` の形式では、
@@ -194,13 +296,19 @@ Linux用Flutterをインストールし、`/home/motchiy/development/flutter/bin
 `version` を使用します。
 
 ```powershell
-.\tool\build_all.ps1 -Version 1.2.3+4
+.\tool\build_all.ps1 `
+  -ApiBaseUrl https://todo-api.example.com `
+  -OutputDirectory dist\release-1.2.3 `
+  -Version 1.2.3+4
 ```
 
 追加のFlutter引数は、スクリプトの末尾へ渡せます。
 
 ```powershell
-.\tool\build_all.ps1 -SkipLinux --verbose
+.\tool\build_all.ps1 `
+  -ApiBaseUrl https://todo-api.example.com `
+  -OutputDirectory dist\release-2.0.0 `
+  -SkipLinux --verbose
 ```
 
 ## テストと静的解析

@@ -146,30 +146,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _switchAccount() async {
-    setState(() => _isAccountActionRunning = true);
-    try {
-      await AuthService.instance.switchGoogleAccount();
-    } on StateError catch (error) {
-      if (error.message == 'Googleログインがキャンセルされました') {
-        return;
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('アカウントを切り替えられませんでした: $error')));
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('アカウントを切り替えられませんでした: $error')));
-      }
-    } finally {
-      if (mounted) setState(() => _isAccountActionRunning = false);
-    }
-  }
-
   Future<void> _signOut() async {
     final shouldSignOut = await showDialog<bool>(
       context: context,
@@ -189,10 +165,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (shouldSignOut != true) return;
-    await AuthService.instance.signOut();
+    setState(() => _isAccountActionRunning = true);
+    try {
+      await AuthService.instance.signOut();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('ログアウトできませんでした: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _isAccountActionRunning = false);
+    }
   }
 
-  Widget _buildAccountSection(ColorScheme colorScheme, bool isDark) {
+  Widget _buildAccountSection(bool isDark) {
     final currentUser = AuthService.instance.currentUser;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,7 +201,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             margin: EdgeInsets.zero,
             child: ListTile(
               leading: _buildAccountAvatar(currentUser),
-              title: Text(currentUser.displayName ?? 'Googleアカウント'),
+              title: Text(currentUser.displayName ?? 'アカウント'),
               subtitle: Text(currentUser.email),
               trailing: const Icon(Icons.check_circle),
             ),
@@ -225,39 +211,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed:
-                    _isAccountActionRunning ||
-                        !AuthService.isGoogleSignInSupported
-                    ? null
-                    : _switchAccount,
-                icon: _isAccountActionRunning
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.swap_horiz),
-                label: const Text('アカウントを変更'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton.icon(
                 onPressed: _isAccountActionRunning ? null : _signOut,
                 icon: const Icon(Icons.logout),
-                label: const Text('ログアウト'),
+                label: const Text('ログアウト / 別アカウントでログイン'),
               ),
             ),
           ],
         ),
-        if (!AuthService.isGoogleSignInSupported)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              'この環境ではGoogleログインを利用できません。',
-              style: TextStyle(color: colorScheme.error, fontSize: 12),
-            ),
-          ),
       ],
     );
   }
@@ -344,7 +304,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                 children: [
                   const SizedBox(height: 8),
-                  _buildAccountSection(colorScheme, isDark),
+                  _buildAccountSection(isDark),
                   if (_isDesktop) ...[
                     const SizedBox(height: 32),
                     const Text(
