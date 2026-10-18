@@ -2,7 +2,8 @@
 
 Flutterで作成したタスク管理アプリです。Windows、Android、Linux、Webに対応しています。
 メールアドレスとパスワードによる認証、およびタスク・設定の同期にはMongoDBを使うREST
-APIを利用します。`server/` にはGinルーターから呼び出すGoハンドラーを含みます。
+APIを利用します。REST APIサーバーはこのリポジトリには含まれていないため、別途作成・
+デプロイしてください。APIの仕様はOpenAPIファイルと以下の説明を参照してください。
 FirebaseとGoogleログインは使用しません。
 
 ## ダウンロードして利用する
@@ -80,65 +81,24 @@ flutter config --enable-linux-desktop
 flutter pub get
 ```
 
-## Go/MongoDB APIハンドラー
+## REST APIサーバー
 
-`server/` はサーバー起動処理やルート登録を含まないGoパッケージです。Ginのルーターは
-利用者側で作成し、公開されたハンドラーを `r.GET()`、`r.POST()`、`r.PUT()`、`r.PATCH()` に
-登録してください。Go 1.23以降、MongoDB、および登録時の確認コード送信用SMTPサーバーが
-必要です。MongoDB Atlas等に専用DBユーザーを作成し、接続文字列と32バイト以上のJWT秘密鍵を
-サーバー環境のシークレットとして設定してください。
-
-```powershell
-cd server
-go mod tidy
-```
-
-ハンドラーを作成し、起動時にMongoDBのインデックスを用意したあと、必要なルートへ登録します。
-以下はルート登録の例です。実際のAPIサーバーの起動・ルーティングはこのリポジトリには含みません。
-
-```go
-import api "github.com/motchiy-lab/motchiy-todo/server"
-
-handlers, err := api.NewHandlers(api.Config{
-    Database: database,
-    JWTSecret: os.Getenv("JWT_SECRET"),
-    Mailer: api.SMTPMailer{
-        Host: os.Getenv("SMTP_HOST"), Port: os.Getenv("SMTP_PORT"),
-        Username: os.Getenv("SMTP_USER"), Password: os.Getenv("SMTP_PASSWORD"),
-        From: os.Getenv("EMAIL_FROM"),
-    },
-})
-if err != nil { log.Fatal(err) }
-if err := handlers.EnsureIndexes(ctx); err != nil { log.Fatal(err) }
-
-r.GET("/health", handlers.Health)
-r.POST("/auth/register", handlers.Register)
-r.POST("/auth/verify-email", handlers.VerifyEmail)
-r.POST("/auth/verification/resend", handlers.ResendVerification)
-r.POST("/auth/login", handlers.Login)
-r.POST("/auth/refresh", handlers.Refresh)
-r.POST("/auth/logout", handlers.AuthMiddleware(), handlers.Logout)
-r.GET("/tasks", handlers.AuthMiddleware(), handlers.GetTasks)
-r.PUT("/tasks", handlers.AuthMiddleware(), handlers.PutTasks)
-r.GET("/settings", handlers.AuthMiddleware(), handlers.GetSettings)
-r.PATCH("/settings", handlers.AuthMiddleware(), handlers.PatchSettings)
-```
-
-`MONGODB_URI`、`JWT_SECRET`、SMTPの`SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、
-`SMTP_PASSWORD`、`EMAIL_FROM`をAPIホスト側で設定します。SMTPはSTARTTLS対応の送信先を
-利用してください。ログイン・登録・メール確認の各ルートには、APIサーバー側でIPおよび
-アカウント単位のレート制限も設定してください。Web版を配信する場合は、実際の配信元だけを
-許可するCORSを設定します。
+このリポジトリにはREST APIサーバーの実装や起動コードは含まれません。MongoDBへの接続、
+メール確認、認証、ルーティング、およびAPIのデプロイはサーバー側で別途実装してください。
+APIサーバーが使うMongoDB接続文字列、JWT秘密鍵、SMTP認証情報などはサーバーの環境変数や
+シークレット管理機能で設定します。`.env.example` は設定項目の例であり、サーバーや
+Flutterクライアントが自動的に読み込むものではありません。
 
 公開環境ではAPIをHTTPSで公開し、MongoDBへのアクセスをAPIサーバーからのみに制限してください。
 接続文字列と秘密鍵をソース管理・アプリ・配布アーカイブに含めず、ホスティング環境の
 シークレット管理機能に保管します。DBは専用の最小権限アカウントを使い、バックアップと
-復旧手順も用意します。
+復旧手順も用意します。ログイン・登録・メール確認にはIPおよびアカウント単位のレート制限を
+設け、Web版を配信する場合は実際の配信元だけを許可するCORSを設定してください。
 
 ### REST APIの契約
 
 OpenAPI 3.1形式の仕様は [`server/openapi.yaml`](server/openapi.yaml) にあります。
-ルート実装・クライアント生成・APIクライアントとの契約確認に利用できます。
+サーバー実装やクライアント生成、API契約の確認に利用できます。
 
 アプリに設定するベースURL配下に、次のJSON APIを実装します。認証以外のデータAPIには
 すべて `Authorization: Bearer <accessToken>` を要求します。成功時のログイン応答は
