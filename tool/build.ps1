@@ -281,12 +281,11 @@ if (
     -not [Uri]::TryCreate($ApiBaseUrl.TrimEnd('/'), [UriKind]::Absolute, [ref]$parsedApiBaseUrl) -or
     $parsedApiBaseUrl.Scheme -ne 'https' -or
     [string]::IsNullOrWhiteSpace($parsedApiBaseUrl.Host) -or
-    $parsedApiBaseUrl.AbsolutePath -ne '/' -or
     $parsedApiBaseUrl.UserInfo -or
     $parsedApiBaseUrl.Query -or
     $parsedApiBaseUrl.Fragment
 ) {
-    throw 'ApiBaseUrl must be an HTTPS origin URL without a path, credentials, query, or fragment.'
+    throw 'ApiBaseUrl must be an HTTPS URL without credentials, query, or fragment.'
 }
 $ApiBaseUrl = $parsedApiBaseUrl.AbsoluteUri.TrimEnd('/')
 $apiDefineArgs = @("--dart-define=API_BASE_URL=$ApiBaseUrl")

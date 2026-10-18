@@ -178,13 +178,13 @@ Flutterアプリへ埋め込んではいけません。アプリに埋め込む�
 
 ## 配布用ビルド
 
-リリースビルドにはデプロイ済みHTTPS APIのオリジンURL（例: `https://todo-api.example.com`）が必須です。
-パスを含むURLではなく、サーバーをルートパスにマウントしてください。プレースホルダーURLのままでは
+リリースビルドにはデプロイ済みHTTPS APIのベースURL（例: `https://todo-api.example.com/motchiy-todo`）が必須です。
+APIをドメイン直下以外のパスに配置する場合は、ベースURLにそのパスを含めます。プレースホルダーURLのままでは
 ビルドできないようにしてあり、API URLはコンパイル時にアプリへ埋め込まれます。Windowsで
 選択中のWindows、Android、Linux向け成果物を作る例:
 
 ```powershell
-.\tool\build_all.ps1 -ApiBaseUrl https://todo-api.example.com
+.\tool\build_all.ps1 -ApiBaseUrl https://todo-api.example.com/motchiy-todo
 ```
 
 既定ではMSIX、APK、Linux tar.gzを `dist/` に作成します。`tool/build_platforms.json` の
@@ -198,18 +198,22 @@ Google Playや継続的な本番アップデートには専用のリリース署
 Windows用Flutterバンドルだけを作る場合:
 
 ```powershell
-.\tool\build_windows.ps1 -ApiBaseUrl https://todo-api.example.com
+.\tool\build_windows.ps1 -ApiBaseUrl https://todo-api.example.com/motchiy-todo
 ```
 
 APKまたはWeb版をFlutterから個別にビルドする場合は、同じAPI URLを渡してください。
 
 ```powershell
-flutter build apk --release --dart-define=API_BASE_URL=https://todo-api.example.com
-flutter build web --release --dart-define=API_BASE_URL=https://todo-api.example.com
+flutter build apk --release --dart-define=API_BASE_URL=https://todo-api.example.com/motchiy-todo
+flutter build web --release --dart-define=API_BASE_URL=https://todo-api.example.com/motchiy-todo
 ```
 
-Linux版もLinux/WSLにFlutter環境を用意してAPI URL付きでビルドできます。各配布物の接続先を
-変えるには、API URLを指定し直して再ビルドが必要です。
+たとえばベースURLが `https://todo-api.example.com/motchiy-todo` の場合、アプリは
+`https://todo-api.example.com/motchiy-todo/auth/login` や
+`https://todo-api.example.com/motchiy-todo/tasks` に接続します。サーバー側またはリバース
+プロキシ側でも、これらのパスでAPIを受け付けるようにしてください。Linux版もLinux/WSLに
+Flutter環境を用意してAPI URL付きでビルドできます。各配布物の接続先を変えるには、API URLを
+指定し直して再ビルドが必要です。
 
 ## プラットフォームを選択したビルド
 
