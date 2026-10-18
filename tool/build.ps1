@@ -5,8 +5,6 @@ param(
 
     [string]$OutputDirectory = 'dist',
 
-    [switch]$CleanOutputDirectory,
-
     [string]$Version,
 
     [string]$ApiBaseUrl,
@@ -338,14 +336,13 @@ if ($selectedPlatforms.Count -eq 0) {
 }
 
 Write-Host "Selected platforms: $($selectedPlatforms -join ', ')"
-if (Test-Path $outputPath) {
-    $existingOutput = @(Get-ChildItem $outputPath -Force)
-    if ($existingOutput.Count -gt 0 -and -not $CleanOutputDirectory) {
-        throw "OutputDirectory is not empty: $outputPath. Choose a new directory or pass -CleanOutputDirectory to remove its contents."
+if (Test-Path $outputPath -PathType Container) {
+    foreach ($existingItem in Get-ChildItem -LiteralPath $outputPath -Force) {
+        Remove-Item -LiteralPath $existingItem.FullName -Recurse -Force
     }
-    if ($existingOutput.Count -gt 0) {
-        Remove-Item (Join-Path $outputPath '*') -Recurse -Force
-    }
+}
+elseif (Test-Path $outputPath) {
+    throw "OutputDirectory exists but is not a directory: $outputPath"
 }
 else {
     New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
