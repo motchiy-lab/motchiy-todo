@@ -56,4 +56,3 @@ app.*.map.json
 
 # 配布フォルダの除外
 dist/
-server/

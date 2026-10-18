@@ -83,21 +83,80 @@ flutter pub get
 
 ## REST APIサーバー
 
-このリポジトリにはREST APIサーバーの実装や起動コードは含まれません。MongoDBへの接続、
-メール確認、認証、ルーティング、およびAPIのデプロイはサーバー側で別途実装してください。
-APIサーバーが使うMongoDB接続文字列、JWT秘密鍵、SMTP認証情報などはサーバーの環境変数や
-シークレット管理機能で設定します。`.env.example` は設定項目の例であり、サーバーや
-Flutterクライアントが自動的に読み込むものではありません。
+`server/` にGinとMongoDBを使ったAPIサーバーがあります。MongoDBへ接続し、認証、
+タスク・設定のユーザー別保存を行います。メールアドレスの所有確認は行いません。
+サーバーは `127.0.0.1:3000` のみにバインドし、
+Cloudflare Tunnelからローカルへ転送する構成です。
+
+Go 1.23以降とMongoDBを用意してから、`.env.example` を `.env` にコピーし、接続文字列、
+32バイト以上のランダムなJWT秘密鍵を設定してください。
+
+```powershell
+Copy-Item .env.example .env
+# .env に実際のMongoDB/JWT設定を書き込む
+[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+Push-Location server
+go mod tidy
+go run .
+```
+
+APIは `http://127.0.0.1:3000/health` でヘルスチェックできます。
+公開API URLを `https://api.motchiy.com` とする場合は、Cloudflare Tunnelのホスト名を
+ローカルの `http://127.0.0.1:3000` に接続してください。APIはドメイン直下のパスで動作します。
+
+ローカルサーバーへFlutterアプリから接続して試す場合:
+
+```powershell
+flutter run --dart-define=API_BASE_URL=http://localhost:3000
+```
+
+Quick Tunnelで一時的に試す場合:
+
+```powershell
+cloudflared tunnel --url http://127.0.0.1:3000
+```
+
+本番利用ではQuick Tunnelではなく、Cloudflare Zero Trustで名前付きTunnelを作成し、DNS名を
+割り当てます。Tunnel設定ファイル（通常は `%USERPROFILE%\.cloudflared\config.yml`）には、
+TunnelのIDとCloudflareが作成した資格情報ファイルを指定し、次のingressを設定してください。
+初回セットアップでは次のコマンドを実行します。`api.motchiy.com` がCloudflare管理下に
+ない場合は、ご自身のCloudflare管理下のホスト名に置き換えてください。
+
+```powershell
+cloudflared tunnel login
+cloudflared tunnel create motchiy-todo
+cloudflared tunnel route dns motchiy-todo api.motchiy.com
+```
+
+```yaml
+tunnel: <TUNNEL-ID>
+credentials-file: C:\Users\<ユーザー名>\.cloudflared\<TUNNEL-ID>.json
+ingress:
+  - hostname: api.motchiy.com
+    service: http://127.0.0.1:3000
+  - service: http_status:404
+```
+
+名前付きTunnelの作成後は、次のコマンドで起動します。
+
+```powershell
+cloudflared tunnel run <TUNNEL名>
+```
+
+Tunnel資格情報ファイルと `.env` は公開・共有せず、リポジトリにも追加しないでください。
+Cloudflare側でもレート制限やWAFを設定し、MongoDBをインターネットへ直接公開しないでください。
+認証APIの上にCloudflare Accessのブラウザー対話ログインを要求するとアプリからのAPI通信が
+遮断されるため、通常はアプリ内のメールアドレス・パスワード認証とCloudflare WAFを使って保護してください。
 
 公開環境ではAPIをHTTPSで公開し、MongoDBへのアクセスをAPIサーバーからのみに制限してください。
 接続文字列と秘密鍵をソース管理・アプリ・配布アーカイブに含めず、ホスティング環境の
 シークレット管理機能に保管します。DBは専用の最小権限アカウントを使い、バックアップと
-復旧手順も用意します。ログイン・登録・メール確認にはIPおよびアカウント単位のレート制限を
+復旧手順も用意します。ログイン・登録にはIPおよびアカウント単位のレート制限を
 設け、Web版を配信する場合は実際の配信元だけを許可するCORSを設定してください。
 
 ### REST APIの契約
 
-OpenAPI 3.1形式の仕様は [`server/openapi.yaml`](server/openapi.yaml) にあります。
+OpenAPI 3.1形式の仕様は [`openapi.yaml`](openapi.yaml) にあります。
 サーバー実装やクライアント生成、API契約の確認に利用できます。
 
 アプリに設定するベースURL配下に、次のJSON APIを実装します。認証以外のデータAPIには
@@ -108,10 +167,8 @@ OpenAPI 3.1形式の仕様は [`server/openapi.yaml`](server/openapi.yaml) に�
 
 | Method / path | 要件 |
 | --- | --- |
-| `POST /auth/register` | `{ "email", "password", "displayName" }` を受け取り、メールを正規化して一意性を検証する。パスワードは12文字以上128バイト以下。ソルト付きscrypt等の適切なパスワードハッシュで保存し、6桁の確認コードをメール送信する。確認完了まではデータAPIへログインさせない。HTTP 202を返す。 |
-| `POST /auth/verify-email` | `{ "email", "code" }` を受け取り、期限（15分）内の確認コードをサーバー秘密鍵付きHMACハッシュと定数時間比較で検証する。失敗回数を制限し、成功時はコードを無効化してログイン応答を返す。 |
-| `POST /auth/verification/resend` | `{ "email" }` を受け取り未確認アカウントのコードを再送する。アカウントの有無を応答で判別できないようにし、IP・アカウント単位で制限する。 |
-| `POST /auth/login` | `{ "email", "password" }` を検証する。メール未確認または資格情報不一致では認証せず、短時間の試行回数制限を適用する。 |
+| `POST /auth/register` | `{ "email", "password", "displayName" }` を受け取り、メールアドレスを正規化して一意性を検証する。パスワードは12文字以上128バイト以下。ソルト付きscrypt等の適切なパスワードハッシュで保存し、登録直後にログイン応答を返す。メールアドレスの所有確認は行わない。 |
+| `POST /auth/login` | `{ "email", "password" }` を検証する。資格情報不一致では認証せず、短時間の試行回数制限を適用する。 |
 | `POST /auth/refresh` | `{ "refreshToken" }` を検証し、古いトークンを一度だけ使えるよう失効・ローテーションして新しいログイン応答を返す。DBにはトークンそのものではなくハッシュを保存する。 |
 | `POST /auth/logout` | 認証中セッションだけを失効させる。 |
 | `GET /tasks` | 認証中ユーザーの `{ "tasks": [...] }` を返す。 |
@@ -127,7 +184,7 @@ OpenAPI 3.1形式の仕様は [`server/openapi.yaml`](server/openapi.yaml) に�
 実行します。ユーザーIDをリクエスト本文から選択できる設計や、全件取得後にアプリ側で
 フィルターする設計は禁止です。
 
-MongoDBにはユーザー（メールアドレス一意、パスワードハッシュ、確認状態）、認証セッション
+MongoDBにはユーザー（メールアドレス一意、パスワードハッシュ）、認証セッション
 （ユーザーID、リフレッシュトークンハッシュ、有効期限、失効日時）、ユーザーごとのタスク
 一覧、ユーザーごとの設定を保存します。ユーザーごとに一意なデータ所有キーを設けます。
 タスクは `id`、`title`、`description`、`isCompleted`、`startDate`、`dueDate`、
@@ -141,9 +198,9 @@ Flutterアプリへ埋め込んではいけません。アプリに埋め込む�
 
 ### 認証とデータ分離
 
-アカウント作成には表示名、メールアドレス、12文字以上のパスワードが必要です。登録先へ
-送信された6桁のコードを確認するまでログインできません。コードは15分で失効し、確認試行
-回数にも制限があります。確認画面を閉じた場合はログイン画面から確認コード入力へ戻れます。
+アカウント作成には表示名、メールアドレス、12文字以上のパスワードが必要です。
+メールアドレスの所有確認は行わず、登録が成功するとそのままログインします。
+そのため、入力したメールアドレスが本人のものかは確認されません。
 パスワードはサーバーでscryptを使ってソルト付きハッシュとして保存し、ログイン時に短命な
 署名付きアクセストークンと、ハッシュだけをDBへ保存するローテーション式リフレッシュ
 トークンを発行します。ログアウトすると該当セッションが失効します。
@@ -153,7 +210,7 @@ Flutterアプリへ埋め込んではいけません。アプリに埋め込む�
 受け付けず、DB検索・更新は認証済みユーザーIDに限定します。アカウント間のアクセス制御を
 クライアント側の値やメールアドレスに依存させません。
 
-ログイン・メール確認APIの成功応答は次の形です。
+登録・ログインAPIの成功応答は次の形です。
 
 ```json
 {
@@ -178,13 +235,13 @@ Flutterアプリへ埋め込んではいけません。アプリに埋め込む�
 
 ## 配布用ビルド
 
-リリースビルドにはデプロイ済みHTTPS APIのベースURL（例: `https://todo-api.example.com/motchiy-todo`）が必須です。
-APIをドメイン直下以外のパスに配置する場合は、ベースURLにそのパスを含めます。プレースホルダーURLのままでは
+リリースビルドにはデプロイ済みHTTPS APIのベースURL（例: `https://todo-api.example.com`）が必須です。
+APIはドメイン直下のパスで公開します。プレースホルダーURLのままでは
 ビルドできないようにしてあり、API URLはコンパイル時にアプリへ埋め込まれます。Windowsで
 選択中のWindows、Android、Linux向け成果物を作る例:
 
 ```powershell
-.\tool\build_all.ps1 -ApiBaseUrl https://todo-api.example.com/motchiy-todo
+.\tool\build.ps1 -ApiBaseUrl https://todo-api.example.com
 ```
 
 既定ではMSIX、APK、Linux tar.gzを `dist/` に作成します。`tool/build_platforms.json` の
@@ -198,19 +255,19 @@ Google Playや継続的な本番アップデートには専用のリリース署
 Windows用Flutterバンドルだけを作る場合:
 
 ```powershell
-.\tool\build_windows.ps1 -ApiBaseUrl https://todo-api.example.com/motchiy-todo
+.\tool\build.ps1 -ApiBaseUrl https://todo-api.example.com
 ```
 
 APKまたはWeb版をFlutterから個別にビルドする場合は、同じAPI URLを渡してください。
 
 ```powershell
-flutter build apk --release --dart-define=API_BASE_URL=https://todo-api.example.com/motchiy-todo
-flutter build web --release --dart-define=API_BASE_URL=https://todo-api.example.com/motchiy-todo
+flutter build apk --release --dart-define=API_BASE_URL=https://todo-api.example.com
+flutter build web --release --dart-define=API_BASE_URL=https://todo-api.example.com
 ```
 
-たとえばベースURLが `https://todo-api.example.com/motchiy-todo` の場合、アプリは
-`https://todo-api.example.com/motchiy-todo/auth/login` や
-`https://todo-api.example.com/motchiy-todo/tasks` に接続します。サーバー側またはリバース
+たとえばベースURLが `https://todo-api.example.com` の場合、アプリは
+`https://todo-api.example.com/auth/login` や
+`https://todo-api.example.com/tasks` に接続します。サーバー側またはリバース
 プロキシ側でも、これらのパスでAPIを受け付けるようにしてください。Linux版もLinux/WSLに
 Flutter環境を用意してAPI URL付きでビルドできます。各配布物の接続先を変えるには、API URLを
 指定し直して再ビルドが必要です。

@@ -25,29 +25,16 @@ class AuthService {
     return _authenticate('/auth/login', {'email': email, 'password': password});
   }
 
-  Future<void> register({
+  Future<AppUser> register({
     required String email,
     required String password,
     required String displayName,
   }) async {
-    await ApiService.instance.postPublic('/auth/register', {
+    return _authenticate('/auth/register', {
       'email': email,
       'password': password,
       'displayName': displayName,
     });
-  }
-
-  Future<void> resendVerificationCode({required String email}) async {
-    await ApiService.instance.postPublic('/auth/verification/resend', {
-      'email': email,
-    });
-  }
-
-  Future<AppUser> verifyEmail({
-    required String email,
-    required String code,
-  }) async {
-    return _authenticate('/auth/verify-email', {'email': email, 'code': code});
   }
 
   Future<AppUser> _authenticate(String path, Map<String, dynamic> body) async {

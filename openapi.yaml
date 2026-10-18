@@ -3,27 +3,26 @@ info:
   title: Motchiy ToDo API
   version: 1.0.0
   description: |
-    REST API used by the Motchiy ToDo client. Implement these operations in the
-    server application. Protected data is always scoped to the user and session
-    identified by the validated bearer access token; clients cannot select a
-    data owner.
+    Motchiy ToDoクライアントが使用するREST APIです。各操作はサーバーアプリケーションに
+    実装してください。保護されたデータは、検証済みBearerアクセストークンで特定された
+    ユーザーとセッションに必ず紐付きます。クライアントがデータ所有者を指定することはできません。
 servers:
-  - url: https://api.example.com
-    description: Replace with the deployed HTTPS API origin.
+  - url: https://api.motchiy.com
+    description: 実際にデプロイしたHTTPS APIのベースURLに置き換えてください。
 tags:
-  - name: Health
-  - name: Authentication
-  - name: Tasks
-  - name: Settings
+  - name: ヘルスチェック
+  - name: 認証
+  - name: タスク
+  - name: 設定
 paths:
   /health:
     get:
-      tags: [Health]
+      tags: [ヘルスチェック]
       operationId: health
-      summary: Check API and MongoDB availability
+      summary: APIとMongoDBの稼働状態を確認
       responses:
         "200":
-          description: API and MongoDB are available.
+          description: APIとMongoDBが利用可能です。
           content:
             application/json:
               schema:
@@ -38,13 +37,13 @@ paths:
 
   /auth/register:
     post:
-      tags: [Authentication]
+      tags: [認証]
       operationId: register
-      summary: Register an account and send an email verification code
+      summary: アカウントを登録してログイン
       description: |
-        Email is normalized to lowercase. Passwords must contain at least 12
-        characters and be no more than 128 UTF-8 bytes. The account cannot log
-        in until its email is verified. Apply IP- and account-based rate limits.
+        メールアドレスは小文字に正規化します。パスワードは12文字以上、UTF-8で128バイト
+        以下にしてください。登録成功時にセッションを作成してログイン応答を返します。
+        メールアドレスの所有確認は行いません。IPアドレスおよびアカウント単位のレート制限を適用してください。
       requestBody:
         required: true
         content:
@@ -61,89 +60,16 @@ paths:
                 displayName:
                   $ref: "#/components/schemas/DisplayName"
       responses:
-        "202":
-          description: Verification code sent.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Message"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "409":
-          description: An account with this email already exists.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Message"
-        "429":
-          $ref: "#/components/responses/TooManyRequests"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /auth/verification/resend:
-    post:
-      tags: [Authentication]
-      operationId: resendVerificationCode
-      summary: Resend an email verification code
-      description: |
-        Returns the same response whether or not an unverified account exists,
-        to avoid disclosing account existence. Apply IP- and account-based rate
-        limits.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [email]
-              properties:
-                email:
-                  $ref: "#/components/schemas/Email"
-      responses:
-        "202":
-          description: Accepted whether or not an unverified account exists.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Message"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "429":
-          $ref: "#/components/responses/TooManyRequests"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /auth/verify-email:
-    post:
-      tags: [Authentication]
-      operationId: verifyEmail
-      summary: Verify an email address and create a session
-      description: |
-        Verification codes contain six digits, expire after 15 minutes, and
-        are limited to five attempts. A successful verification returns the
-        same token response as login.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [email, code]
-              properties:
-                email:
-                  $ref: "#/components/schemas/Email"
-                code:
-                  type: string
-                  pattern: "^[0-9]{6}$"
-      responses:
         "200":
           $ref: "#/components/responses/TokenResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: このメールアドレスのアカウントはすでに登録されています。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
         "429":
           $ref: "#/components/responses/TooManyRequests"
         "500":
@@ -151,10 +77,10 @@ paths:
 
   /auth/login:
     post:
-      tags: [Authentication]
+      tags: [認証]
       operationId: login
-      summary: Authenticate with email and password
-      description: Email must be verified before login. Apply IP- and account-based rate limits.
+      summary: メールアドレスとパスワードでログイン
+      description: メールアドレスとパスワードを検証します。メールアドレスの所有確認は行いません。IPアドレスおよびアカウント単位のレート制限を適用してください。
       requestBody:
         required: true
         content:
@@ -183,10 +109,10 @@ paths:
 
   /auth/refresh:
     post:
-      tags: [Authentication]
+      tags: [認証]
       operationId: refreshSession
-      summary: Rotate a refresh token and issue a new access token
-      description: The old refresh token is invalidated when it is successfully rotated.
+      summary: リフレッシュトークンを更新して新しいアクセストークンを発行
+      description: 更新に成功すると、古いリフレッシュトークンは無効になります。
       requestBody:
         required: true
         content:
@@ -214,14 +140,14 @@ paths:
 
   /auth/logout:
     post:
-      tags: [Authentication]
+      tags: [認証]
       operationId: logout
-      summary: Revoke the current session
+      summary: 現在のセッションを無効化
       security:
         - bearerAuth: []
       responses:
         "204":
-          description: Session revoked.
+          description: セッションを無効化しました。
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
@@ -229,14 +155,14 @@ paths:
 
   /tasks:
     get:
-      tags: [Tasks]
+      tags: [タスク]
       operationId: getTasks
-      summary: Get the authenticated user's task list
+      summary: 認証済みユーザーのタスク一覧を取得
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: The user's tasks, or an empty list when none are stored.
+          description: ユーザーのタスク一覧。保存済みのタスクがない場合は空の配列を返します。
           content:
             application/json:
               schema:
@@ -254,13 +180,12 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
     put:
-      tags: [Tasks]
+      tags: [タスク]
       operationId: replaceTasks
-      summary: Replace the authenticated user's task list
+      summary: 認証済みユーザーのタスク一覧を置き換え
       description: |
-        Task objects reject properties other than those defined in the schema.
-        Ownership is taken only from the validated bearer token, never from the
-        request body.
+        スキーマで定義されていないプロパティを含むタスクは拒否してください。
+        所有者は検証済みBearerトークンだけから特定し、リクエスト本文から決定してはいけません。
       security:
         - bearerAuth: []
       requestBody:
@@ -279,7 +204,7 @@ paths:
                     $ref: "#/components/schemas/Task"
       responses:
         "204":
-          description: Task list replaced.
+          description: タスク一覧を置き換えました。
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -289,14 +214,14 @@ paths:
 
   /settings:
     get:
-      tags: [Settings]
+      tags: [設定]
       operationId: getSettings
-      summary: Get the authenticated user's settings
+      summary: 認証済みユーザーの設定を取得
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: User settings, including defaults for settings not yet saved.
+          description: 未保存項目には初期値を適用したユーザー設定を返します。
           content:
             application/json:
               schema:
@@ -306,10 +231,10 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
     patch:
-      tags: [Settings]
+      tags: [設定]
       operationId: patchSettings
-      summary: Partially update the authenticated user's settings
-      description: Only the listed settings are accepted. Ownership is taken from the bearer token.
+      summary: 認証済みユーザーの設定を部分更新
+      description: 定義された設定項目のみ受け付けます。所有者はBearerトークンから特定します。
       security:
         - bearerAuth: []
       requestBody:
@@ -320,7 +245,7 @@ paths:
               $ref: "#/components/schemas/SettingsPatch"
       responses:
         "204":
-          description: Settings updated.
+          description: 設定を更新しました。
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -343,7 +268,7 @@ components:
       type: string
       minLength: 12
       maxLength: 128
-      description: At most 128 UTF-8 bytes.
+      description: UTF-8で128バイト以下にしてください。
     DisplayName:
       type: string
       minLength: 1
@@ -362,7 +287,7 @@ components:
       properties:
         id:
           type: string
-          description: Server-issued user identifier.
+          description: サーバーが発行したユーザーID。
         email:
           $ref: "#/components/schemas/Email"
         displayName:
@@ -376,10 +301,10 @@ components:
       properties:
         accessToken:
           type: string
-          description: Bearer access token, valid for 900 seconds.
+          description: 900秒間有効なBearerアクセストークン。
         refreshToken:
           type: string
-          description: Opaque refresh token; rotate it using POST /auth/refresh.
+          description: 不透明なリフレッシュトークン。POST /auth/refreshで更新してください。
         expiresIn:
           type: integer
           const: 900
@@ -449,37 +374,37 @@ components:
           type: boolean
   responses:
     TokenResponse:
-      description: Authentication succeeded and a session was created or refreshed.
+      description: 認証に成功し、セッションを作成または更新しました。
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/TokenResponse"
     BadRequest:
-      description: Request JSON or one or more fields are invalid.
+      description: リクエストJSONまたは入力項目が不正です。
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Message"
     Unauthorized:
-      description: Authentication failed, token is invalid, or session expired.
+      description: 認証に失敗したか、トークンが無効、またはセッションの有効期限が切れています。
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Message"
     TooManyRequests:
-      description: Authentication or verification rate limit exceeded.
+      description: 認証リクエストがレート制限を超えました。
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Message"
     InternalError:
-      description: Unexpected server error.
+      description: 予期しないサーバーエラーが発生しました。
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Message"
     ServiceUnavailable:
-      description: MongoDB is not available.
+      description: MongoDBを利用できません。
       content:
         application/json:
           schema:
