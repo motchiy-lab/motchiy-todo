@@ -7,6 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"math/big"
 	"net"
 	"strings"
 	"sync"
@@ -31,7 +33,7 @@ type tokenClaims struct {
 }
 
 type authSession struct {
-	UserID    primitive.ObjectID
+	UserID    string
 	SessionID primitive.ObjectID
 }
 
@@ -127,13 +129,56 @@ func hashToken(value string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func createAccessToken(userID, sessionID primitive.ObjectID, secret []byte) (string, error) {
+func newUserID() (string, error) {
+	value := make([]byte, 16)
+	if _, err := rand.Read(value); err != nil {
+		return "", err
+	}
+	value[6] = (value[6] & 0x0f) | 0x40
+	value[8] = (value[8] & 0x3f) | 0x80
+	encoded := hex.EncodeToString(value)
+	return fmt.Sprintf("%s-%s-%s-%s-%s", encoded[:8], encoded[8:12], encoded[12:16], encoded[16:20], encoded[20:]), nil
+}
+
+func validUserID(value string) bool {
+	if len(value) != 36 || value != strings.ToLower(value) ||
+		value[8] != '-' || value[13] != '-' || value[18] != '-' || value[23] != '-' {
+		return false
+	}
+	decoded, err := hex.DecodeString(strings.ReplaceAll(value, "-", ""))
+	return err == nil && len(decoded) == 16
+}
+
+func newVerificationCode() (string, error) {
+	value, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
+	if err != nil {
+		return "", err
+	}
+	return strings.Repeat("0", 6-len(value.String())) + value.String(), nil
+}
+
+func hashVerificationCode(code string, secret []byte) string {
+	mac := hmac.New(sha256.New, secret)
+	_, _ = mac.Write([]byte(code))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func verificationCodeMatches(code, expected string, secret []byte) bool {
+	decoded, err := hex.DecodeString(expected)
+	if err != nil || len(decoded) != sha256.Size {
+		return false
+	}
+	actual, err := hex.DecodeString(hashVerificationCode(code, secret))
+	return err == nil && hmac.Equal(decoded, actual)
+}
+
+func createAccessToken(userID string, sessionID primitive.ObjectID, secret []byte) (string, error) {
 	now := time.Now().UTC()
 	claims := tokenClaims{
 		SessionID: sessionID.Hex(),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    tokenIssuer,
-			Subject:   userID.Hex(),
+			Subject:   userID,
 			Audience:  jwt.ClaimStrings{tokenAudience},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(accessTokenLifetime)),
@@ -154,13 +199,12 @@ func parseAccessToken(value string, secret []byte) (authSession, error) {
 	if err != nil || token == nil || !token.Valid {
 		return authSession{}, errors.New("invalid access token")
 	}
-	userID, err := primitive.ObjectIDFromHex(claims.Subject)
-	if err != nil {
+	if !validUserID(claims.Subject) {
 		return authSession{}, errors.New("invalid user identifier in access token")
 	}
 	sessionID, err := primitive.ObjectIDFromHex(claims.SessionID)
 	if err != nil {
 		return authSession{}, errors.New("invalid session identifier in access token")
 	}
-	return authSession{UserID: userID, SessionID: sessionID}, nil
+	return authSession{UserID: claims.Subject, SessionID: sessionID}, nil
 }

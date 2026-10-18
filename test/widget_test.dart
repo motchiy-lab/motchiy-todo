@@ -7,7 +7,7 @@ void main() {
   testWidgets('email sign-in can switch to account registration', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: AuthGate()));
+    await tester.pumpWidget(const MaterialApp(home: SignInScreen()));
 
     expect(find.text('ログイン'), findsOneWidget);
     expect(find.text('メールアドレス'), findsOneWidget);

@@ -124,11 +124,19 @@ func validateTask(task map[string]any) error {
 		if !ok {
 			return badRequest("タスクの日付はISO 8601形式で指定してください。")
 		}
-		if _, err := time.Parse(time.RFC3339Nano, text); err != nil {
+		if !isValidTaskDate(text) {
 			return badRequest("タスクの日付はISO 8601形式で指定してください。")
 		}
 	}
 	return nil
+}
+
+func isValidTaskDate(value string) bool {
+	if _, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return true
+	}
+	_, err := time.ParseInLocation("2006-01-02T15:04:05.999999999", value, time.UTC)
+	return err == nil
 }
 
 func decodeSettings(reader io.Reader) (map[string]any, error) {

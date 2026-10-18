@@ -42,8 +42,8 @@ paths:
       summary: アカウントを登録してログイン
       description: |
         メールアドレスは小文字に正規化します。パスワードは12文字以上、UTF-8で128バイト
-        以下にしてください。登録成功時にセッションを作成してログイン応答を返します。
-        メールアドレスの所有確認は行いません。IPアドレスおよびアカウント単位のレート制限を適用してください。
+        以下にしてください。登録後、Resendで6桁の認証コードを送信します。コードの有効期限は15分です。
+        メール認証完了前はログインできません。IPアドレスおよびアカウント単位のレート制限を適用してください。
       requestBody:
         required: true
         content:
@@ -60,8 +60,12 @@ paths:
                 displayName:
                   $ref: "#/components/schemas/DisplayName"
       responses:
-        "200":
-          $ref: "#/components/responses/TokenResponse"
+        "202":
+          description: 登録を受け付け、確認コードを送信しました。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
         "400":
           $ref: "#/components/responses/BadRequest"
         "409":
@@ -75,12 +79,80 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /auth/verification/resend:
+    post:
+      tags: [認証]
+      operationId: resendVerificationCode
+      summary: メール認証コードを再送信
+      description: |
+        メールアドレスが登録済みかどうかを応答から判別できないようにします。
+        IPアドレスおよびメールアドレスごとの送信回数を制限してください。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email:
+                  $ref: "#/components/schemas/Email"
+      responses:
+        "202":
+          description: リクエストを受け付けました。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/verify-email:
+    post:
+      tags: [認証]
+      operationId: verifyEmail
+      summary: メールアドレスを認証してセッションを作成
+      description: |
+        有効期限内の6桁の認証コードを検証します。5回を超える誤入力は拒否します。
+        認証成功時にはログイン応答を返します。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, code]
+              properties:
+                email:
+                  $ref: "#/components/schemas/Email"
+                code:
+                  type: string
+                  pattern: "^[0-9]{6}$"
+      responses:
+        "200":
+          $ref: "#/components/responses/TokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /auth/login:
     post:
       tags: [認証]
       operationId: login
       summary: メールアドレスとパスワードでログイン
-      description: メールアドレスとパスワードを検証します。メールアドレスの所有確認は行いません。IPアドレスおよびアカウント単位のレート制限を適用してください。
+      description: メールアドレスとパスワードを検証します。未認証のアカウントには403を返します。
+        IPアドレスおよびアカウント単位のレート制限を適用してください。
       requestBody:
         required: true
         content:
@@ -102,6 +174,12 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: メールアドレスが未認証です。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
         "429":
           $ref: "#/components/responses/TooManyRequests"
         "500":
@@ -177,6 +255,8 @@ paths:
                       $ref: "#/components/schemas/Task"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
     put:
@@ -209,6 +289,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -228,6 +310,8 @@ paths:
                 $ref: "#/components/schemas/Settings"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
     patch:
@@ -250,6 +334,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -283,17 +369,21 @@ components:
     User:
       type: object
       additionalProperties: false
-      required: [id, email, displayName, photoUrl]
+      required: [id, email, displayName, photoUrl, emailVerified]
       properties:
         id:
           type: string
-          description: サーバーが発行したユーザーID。
+          format: uuid
+          description: サーバーが発行した変更されないユーザーUUID。
         email:
           $ref: "#/components/schemas/Email"
         displayName:
           $ref: "#/components/schemas/DisplayName"
         photoUrl:
           type: [string, "null"]
+        emailVerified:
+          type: boolean
+          const: true
     TokenResponse:
       type: object
       additionalProperties: false
@@ -334,13 +424,13 @@ components:
           default: false
         startDate:
           type: [string, "null"]
-          format: date-time
+          description: ISO 8601日時。タイムゾーン付きまたはタイムゾーンなしの形式を受け付けます。
         dueDate:
           type: [string, "null"]
-          format: date-time
+          description: ISO 8601日時。タイムゾーン付きまたはタイムゾーンなしの形式を受け付けます。
         completedAt:
           type: [string, "null"]
-          format: date-time
+          description: ISO 8601日時。タイムゾーン付きまたはタイムゾーンなしの形式を受け付けます。
     Settings:
       type: object
       additionalProperties: false

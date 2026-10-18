@@ -31,6 +31,8 @@ class ApiService {
   final http.Client _client = http.Client();
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   Future<String?>? _refreshing;
+  Future<void> Function(Map<String, dynamic>)? onSessionUserRefreshed;
+  Future<void> Function()? onSessionExpired;
 
   Uri _uri(String path) {
     final base = Uri.parse(apiBaseUrl);
@@ -162,11 +164,22 @@ class ApiService {
       if (response is! Map<String, dynamic>) {
         throw const ApiException('APIのトークン更新応答が不正です。');
       }
+      final user = response['user'];
+      if (user is! Map<String, dynamic>) {
+        throw const ApiException('APIのトークン更新応答にユーザー情報がありません。');
+      }
+      final refreshedUser = AppUser.fromJson(user);
       await _storeTokens(response);
+      await _storage.write(
+        key: _userKey,
+        value: jsonEncode(refreshedUser.toJson()),
+      );
+      await onSessionUserRefreshed?.call(user);
       return await _storage.read(key: _accessTokenKey);
     } on ApiException catch (error) {
       if (error.statusCode == 401 || error.statusCode == 403) {
         await clearSession();
+        await onSessionExpired?.call();
         return null;
       }
       rethrow;

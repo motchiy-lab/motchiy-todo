@@ -1,9 +1,10 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
-
-import 'dart:io';
 
 import 'screens/auth_gate.dart';
 import 'services/auth_service.dart';
@@ -38,30 +39,11 @@ final ValueNotifier<bool> enableTabAnimationsNotifier = ValueNotifier<bool>(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await AuthService.instance.initialize();
-  } catch (e) {
-    debugPrint('Could not restore API session: $e');
-  }
-  final prefs = await SharedPreferences.getInstance();
-  themeIndexNotifier.value = prefs.getInt('theme_color_index') ?? 0;
-
-  final int themeModeIndex = prefs.getInt('theme_mode_index') ?? 0;
-  themeModeNotifier.value =
-      ThemeMode.values[themeModeIndex.clamp(0, ThemeMode.values.length - 1)];
-
-  enableTabAnimationsNotifier.value =
-      prefs.getBool('enable_tab_animations') ?? true;
-  final closeToTray = prefs.getBool('close_to_tray') ?? false;
-  desktopCloseToTrayNotifier.value = closeToTray;
-
-  if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+  final isDesktop =
+      !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+  if (isDesktop) {
     await windowManager.ensureInitialized();
-    await DesktopWindowService.instance.initialize(closeToTray: closeToTray);
-    if (Platform.isWindows || Platform.isLinux) {
-      desktopStartupNotifier.value = await StartupService.instance.initialize();
-    }
-    WindowOptions windowOptions = const WindowOptions(
+    const windowOptions = WindowOptions(
       minimumSize: Size(400, 500),
       center: true,
       backgroundColor: Colors.transparent,
@@ -74,6 +56,42 @@ void main() async {
     });
   }
   runApp(const TaskApp());
+  unawaited(_initializeApp(isDesktop: isDesktop));
+}
+
+Future<void> _initializeApp({required bool isDesktop}) async {
+  final authInitialization = AuthService.instance.initialize().catchError((
+    Object error,
+  ) {
+    debugPrint('Could not restore API session: $error');
+  });
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    themeIndexNotifier.value = prefs.getInt('theme_color_index') ?? 0;
+
+    final themeModeIndex = prefs.getInt('theme_mode_index') ?? 0;
+    themeModeNotifier.value =
+        ThemeMode.values[themeModeIndex.clamp(0, ThemeMode.values.length - 1)];
+
+    enableTabAnimationsNotifier.value =
+        prefs.getBool('enable_tab_animations') ?? true;
+    final closeToTray = prefs.getBool('close_to_tray') ?? false;
+    desktopCloseToTrayNotifier.value = closeToTray;
+
+    Future<bool>? startupInitialization;
+    if (isDesktop) {
+      await DesktopWindowService.instance.initialize(closeToTray: closeToTray);
+      if (Platform.isWindows || Platform.isLinux) {
+        startupInitialization = StartupService.instance.initialize();
+      }
+    }
+    if (startupInitialization != null) {
+      desktopStartupNotifier.value = await startupInitialization;
+    }
+  } catch (error) {
+    debugPrint('Could not initialize application settings: $error');
+  }
+  await authInitialization;
 }
 
 class TaskApp extends StatelessWidget {

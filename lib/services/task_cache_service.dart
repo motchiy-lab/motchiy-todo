@@ -62,6 +62,21 @@ class TaskCacheService {
     await prefs.remove(_pendingSyncKey(userId));
   }
 
+  Future<void> migrateUserId(String oldUserId, String newUserId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final oldTasksKey = _tasksKey(oldUserId);
+    final newTasksKey = _tasksKey(newUserId);
+    if (!prefs.containsKey(newTasksKey) && prefs.containsKey(oldTasksKey)) {
+      final tasks = prefs.getString(oldTasksKey);
+      if (tasks != null) await prefs.setString(newTasksKey, tasks);
+      if (prefs.getBool(_pendingSyncKey(oldUserId)) ?? false) {
+        await prefs.setBool(_pendingSyncKey(newUserId), true);
+      }
+      await prefs.remove(oldTasksKey);
+      await prefs.remove(_pendingSyncKey(oldUserId));
+    }
+  }
+
   List<Task> _decodeTasks(String encoded) {
     final decoded = jsonDecode(encoded);
     if (decoded is! List) {

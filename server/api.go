@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -19,34 +20,40 @@ import (
 type api struct {
 	db        *mongo.Database
 	jwtSecret []byte
+	mailer    verificationMailer
 	limiter   *fixedWindowLimiter
 }
 
 type account struct {
-	ID           primitive.ObjectID `bson:"_id,omitempty"`
-	Email        string             `bson:"email"`
-	DisplayName  string             `bson:"displayName"`
-	PasswordHash string             `bson:"passwordHash"`
+	ID                        primitive.ObjectID `bson:"_id,omitempty"`
+	UserID                    string             `bson:"userId"`
+	Email                     string             `bson:"email"`
+	DisplayName               string             `bson:"displayName"`
+	PasswordHash              string             `bson:"passwordHash"`
+	EmailVerified             bool               `bson:"emailVerified"`
+	VerificationCodeHash      string             `bson:"verificationCodeHash,omitempty"`
+	VerificationCodeExpiresAt *time.Time         `bson:"verificationCodeExpiresAt,omitempty"`
+	VerificationAttempts      int                `bson:"verificationAttempts"`
 }
 
 type session struct {
 	ID               primitive.ObjectID `bson:"_id,omitempty"`
-	UserID           primitive.ObjectID `bson:"userId"`
+	UserID           string             `bson:"userId"`
 	RefreshTokenHash string             `bson:"refreshTokenHash"`
 	ExpiresAt        time.Time          `bson:"expiresAt"`
 	RevokedAt        *time.Time         `bson:"revokedAt"`
 }
 
 type taskList struct {
-	UserID primitive.ObjectID `bson:"userId"`
-	Tasks  []map[string]any   `bson:"tasks"`
+	UserID string           `bson:"userId"`
+	Tasks  []map[string]any `bson:"tasks"`
 }
 
 type userSettings struct {
-	UserID              primitive.ObjectID `bson:"userId"`
-	ThemeColorIndex     int                `bson:"themeColorIndex"`
-	ThemeModeIndex      int                `bson:"themeModeIndex"`
-	EnableTabAnimations bool               `bson:"enableTabAnimations"`
+	UserID              string `bson:"userId"`
+	ThemeColorIndex     int    `bson:"themeColorIndex"`
+	ThemeModeIndex      int    `bson:"themeModeIndex"`
+	EnableTabAnimations bool   `bson:"enableTabAnimations"`
 }
 
 type tokenResponse struct {
@@ -57,10 +64,11 @@ type tokenResponse struct {
 }
 
 type publicAccount struct {
-	ID          string `json:"id"`
-	Email       string `json:"email"`
-	DisplayName string `json:"displayName"`
-	PhotoURL    any    `json:"photoUrl"`
+	ID            string `json:"id"`
+	Email         string `json:"email"`
+	DisplayName   string `json:"displayName"`
+	PhotoURL      any    `json:"photoUrl"`
+	EmailVerified bool   `json:"emailVerified"`
 }
 
 type authCredentials struct {
@@ -68,15 +76,22 @@ type authCredentials struct {
 	Password string `json:"password"`
 }
 
-func newAPI(database *mongo.Database, secret []byte) (*api, error) {
+const verificationLifetime = 15 * time.Minute
+
+var verificationCodePattern = regexp.MustCompile(`^[0-9]{6}$`)
+
+func newAPI(database *mongo.Database, secret []byte, emailer verificationMailer) (*api, error) {
 	if database == nil {
 		return nil, errors.New("MongoDB database is required")
 	}
 	if len(secret) < 32 {
 		return nil, errors.New("JWT_SECRET must be at least 32 bytes")
 	}
+	if emailer == nil {
+		return nil, errors.New("Resend verification email sender is required")
+	}
 	return &api{
-		db: database, jwtSecret: secret,
+		db: database, jwtSecret: secret, mailer: emailer,
 		limiter: newFixedWindowLimiter(),
 	}, nil
 }
@@ -88,6 +103,7 @@ func (a *api) ensureIndexes(ctx context.Context) error {
 	}{
 		{"users", []mongo.IndexModel{
 			{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetUnique(true)},
+			{Keys: bson.D{{Key: "userId", Value: 1}}, Options: options.Index().SetUnique(true)},
 		}},
 		{"sessions", []mongo.IndexModel{
 			{Keys: bson.D{{Key: "refreshTokenHash", Value: 1}}, Options: options.Index().SetUnique(true)},
@@ -113,6 +129,8 @@ func (a *api) registerRoutes(router *gin.Engine) {
 	group := router.Group("")
 	group.GET("/health", a.health)
 	group.POST("/auth/register", a.rateLimit("register"), a.register)
+	group.POST("/auth/verification/resend", a.rateLimit("resend"), a.resendVerification)
+	group.POST("/auth/verify-email", a.rateLimit("verify"), a.verifyEmail)
 	group.POST("/auth/login", a.rateLimit("login"), a.login)
 	group.POST("/auth/refresh", a.rateLimit("refresh"), a.refresh)
 
@@ -194,13 +212,30 @@ func (a *api) register(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "入力内容が正しくありません。")
 		return
 	}
+	if !a.limiter.allow("register:email:"+email, 5, 15*time.Minute) {
+		writeError(c, http.StatusTooManyRequests, "このメールアドレスでの登録回数が上限を超えました。")
+		return
+	}
+	userID, err := newUserID()
+	if err != nil {
+		writeServerError(c, err)
+		return
+	}
 	passwordHash, err := hashPassword(request.Password)
 	if err != nil {
 		writeServerError(c, err)
 		return
 	}
+	code, err := newVerificationCode()
+	if err != nil {
+		writeServerError(c, err)
+		return
+	}
+	expiresAt := time.Now().UTC().Add(verificationLifetime)
 	user := account{
-		Email: email, DisplayName: displayName, PasswordHash: passwordHash,
+		UserID: userID, Email: email, DisplayName: displayName, PasswordHash: passwordHash,
+		EmailVerified: false, VerificationCodeHash: hashVerificationCode(code, a.jwtSecret),
+		VerificationCodeExpiresAt: &expiresAt,
 	}
 	result, err := a.db.Collection("users").InsertOne(c.Request.Context(), user)
 	if mongo.IsDuplicateKeyError(err) {
@@ -211,7 +246,118 @@ func (a *api) register(c *gin.Context) {
 		writeServerError(c, err)
 		return
 	}
-	user.ID = result.InsertedID.(primitive.ObjectID)
+	var ok bool
+	user.ID, ok = result.InsertedID.(primitive.ObjectID)
+	if !ok {
+		writeServerError(c, errors.New("MongoDB returned an invalid user ID"))
+		return
+	}
+	if err := a.mailer.sendVerificationCode(c.Request.Context(), user.Email, code); err != nil {
+		writeServerError(c, err)
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"message": "確認コードをメールで送信しました。"})
+}
+
+func (a *api) resendVerification(c *gin.Context) {
+	var request struct {
+		Email string `json:"email"`
+	}
+	if !bindJSON(c, &request) {
+		return
+	}
+	email := normalizeEmail(request.Email)
+	if email != "" && !a.limiter.allow("resend:email:"+email, 5, 15*time.Minute) {
+		writeError(c, http.StatusTooManyRequests, "確認コードの送信回数が上限を超えました。")
+		return
+	}
+	if email != "" {
+		code, err := newVerificationCode()
+		if err != nil {
+			writeServerError(c, err)
+			return
+		}
+		expiresAt := time.Now().UTC().Add(verificationLifetime)
+		result, err := a.db.Collection("users").UpdateOne(c.Request.Context(),
+			bson.M{"email": email, "emailVerified": bson.M{"$ne": true}},
+			bson.M{"$set": bson.M{
+				"emailVerified": false, "verificationCodeHash": hashVerificationCode(code, a.jwtSecret),
+				"verificationCodeExpiresAt": expiresAt, "verificationAttempts": 0,
+			}},
+		)
+		if err != nil {
+			writeServerError(c, err)
+			return
+		}
+		if result.ModifiedCount == 1 {
+			if err := a.mailer.sendVerificationCode(c.Request.Context(), email, code); err != nil {
+				writeServerError(c, err)
+				return
+			}
+		}
+	}
+	c.JSON(http.StatusAccepted, gin.H{"message": "アカウントが存在し、未認証の場合は確認コードを送信しました。"})
+}
+
+func (a *api) verifyEmail(c *gin.Context) {
+	var request struct {
+		Email string `json:"email"`
+		Code  string `json:"code"`
+	}
+	if !bindJSON(c, &request) {
+		return
+	}
+	email := normalizeEmail(request.Email)
+	if email == "" || !verificationCodePattern.MatchString(request.Code) {
+		writeError(c, http.StatusBadRequest, "メールアドレスまたは確認コードが正しくありません。")
+		return
+	}
+	if !a.limiter.allow("verify:email:"+email, 10, 15*time.Minute) {
+		writeError(c, http.StatusTooManyRequests, "確認コードの入力回数が上限を超えました。")
+		return
+	}
+	ctx := c.Request.Context()
+	var user account
+	err := a.db.Collection("users").FindOneAndUpdate(
+		ctx,
+		bson.M{
+			"email": email, "emailVerified": bson.M{"$ne": true},
+			"verificationCodeExpiresAt": bson.M{"$gt": time.Now().UTC()},
+			"verificationAttempts":      bson.M{"$lt": 5},
+		},
+		bson.M{"$inc": bson.M{"verificationAttempts": 1}},
+		options.FindOneAndUpdate().SetReturnDocument(options.Before),
+	).Decode(&user)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		writeError(c, http.StatusUnauthorized, "確認コードが無効か、有効期限が切れています。")
+		return
+	}
+	if err != nil {
+		writeServerError(c, err)
+		return
+	}
+	if !verificationCodeMatches(request.Code, user.VerificationCodeHash, a.jwtSecret) {
+		writeError(c, http.StatusUnauthorized, "確認コードが無効か、有効期限が切れています。")
+		return
+	}
+	result, err := a.db.Collection("users").UpdateOne(ctx, bson.M{
+		"_id": user.ID, "emailVerified": bson.M{"$ne": true},
+		"verificationCodeHash":      user.VerificationCodeHash,
+		"verificationCodeExpiresAt": bson.M{"$gt": time.Now().UTC()},
+		"verificationAttempts":      bson.M{"$lte": 5},
+	}, bson.M{
+		"$set":   bson.M{"emailVerified": true, "verificationCodeHash": "", "verificationAttempts": 0},
+		"$unset": bson.M{"verificationCodeExpiresAt": ""},
+	})
+	if err != nil {
+		writeServerError(c, err)
+		return
+	}
+	if result.ModifiedCount != 1 {
+		writeError(c, http.StatusUnauthorized, "確認コードが無効か、有効期限が切れています。")
+		return
+	}
+	user.EmailVerified = true
 	a.createSessionResponse(c, user)
 }
 
@@ -237,6 +383,10 @@ func (a *api) login(c *gin.Context) {
 	}
 	if err != nil {
 		writeServerError(c, err)
+		return
+	}
+	if !user.EmailVerified {
+		writeError(c, http.StatusForbidden, "メールアドレスの認証が完了していません。確認コードを入力してください。")
 		return
 	}
 	a.createSessionResponse(c, user)
@@ -272,7 +422,7 @@ func (a *api) refresh(c *gin.Context) {
 		return
 	}
 	var user account
-	err = a.db.Collection("users").FindOne(c.Request.Context(), bson.M{"_id": current.UserID}).Decode(&user)
+	err = a.db.Collection("users").FindOne(c.Request.Context(), bson.M{"userId": current.UserID}).Decode(&user)
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		if _, revokeErr := a.db.Collection("sessions").UpdateOne(c.Request.Context(),
 			bson.M{"_id": current.ID, "userId": current.UserID},
@@ -288,12 +438,24 @@ func (a *api) refresh(c *gin.Context) {
 		writeServerError(c, err)
 		return
 	}
+	if !user.EmailVerified {
+		_, revokeErr := a.db.Collection("sessions").UpdateOne(c.Request.Context(),
+			bson.M{"_id": current.ID, "userId": current.UserID, "revokedAt": nil},
+			bson.M{"$set": bson.M{"revokedAt": now}},
+		)
+		if revokeErr != nil {
+			writeServerError(c, revokeErr)
+			return
+		}
+		writeError(c, http.StatusForbidden, "メールアドレスの認証が完了していません。")
+		return
+	}
 	nextRefreshToken, err := newRefreshToken()
 	if err != nil {
 		writeServerError(c, err)
 		return
 	}
-	accessToken, err := createAccessToken(user.ID, current.ID, a.jwtSecret)
+	accessToken, err := createAccessToken(user.UserID, current.ID, a.jwtSecret)
 	if err != nil {
 		writeServerError(c, err)
 		return
@@ -463,6 +625,20 @@ func (a *api) authMiddleware() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		var user account
+		err = a.db.Collection("users").FindOne(c.Request.Context(),
+			bson.M{"userId": auth.UserID, "emailVerified": true},
+		).Decode(&user)
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			writeError(c, http.StatusUnauthorized, "メールアドレスの認証が完了していません。")
+			c.Abort()
+			return
+		}
+		if err != nil {
+			writeServerError(c, err)
+			c.Abort()
+			return
+		}
 		c.Set("auth", auth)
 		c.Next()
 	}
@@ -487,7 +663,7 @@ func (a *api) createSessionResponse(c *gin.Context, user account) {
 		return
 	}
 	current := session{
-		UserID: user.ID, RefreshTokenHash: hashToken(refreshToken),
+		UserID: user.UserID, RefreshTokenHash: hashToken(refreshToken),
 		ExpiresAt: time.Now().UTC().Add(refreshTokenLifetime),
 	}
 	result, err := a.db.Collection("sessions").InsertOne(c.Request.Context(), current)
@@ -500,7 +676,7 @@ func (a *api) createSessionResponse(c *gin.Context, user account) {
 		writeServerError(c, errors.New("MongoDB returned an invalid session ID"))
 		return
 	}
-	accessToken, err := createAccessToken(user.ID, sessionID, a.jwtSecret)
+	accessToken, err := createAccessToken(user.UserID, sessionID, a.jwtSecret)
 	if err != nil {
 		writeServerError(c, err)
 		return
@@ -513,7 +689,8 @@ func (a *api) createSessionResponse(c *gin.Context, user account) {
 
 func toPublicAccount(user account) publicAccount {
 	return publicAccount{
-		ID: user.ID.Hex(), Email: user.Email, DisplayName: user.DisplayName, PhotoURL: nil,
+		ID: user.UserID, Email: user.Email, DisplayName: user.DisplayName, PhotoURL: nil,
+		EmailVerified: user.EmailVerified,
 	}
 }
 
@@ -540,5 +717,9 @@ func writeError(c *gin.Context, status int, message string) {
 
 func writeServerError(c *gin.Context, err error) {
 	log.Printf("API request failed: %v", err)
+	if mongo.IsTimeout(err) || mongo.IsNetworkError(err) {
+		writeError(c, http.StatusServiceUnavailable, "データベースに接続できません。MongoDBの起動と接続設定を確認してください。")
+		return
+	}
 	writeError(c, http.StatusInternalServerError, "サーバーでエラーが発生しました。")
 }

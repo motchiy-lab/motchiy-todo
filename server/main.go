@@ -31,7 +31,7 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI).SetServerSelectionTimeout(10*time.Second))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI).SetServerSelectionTimeout(3*time.Second))
 	if err != nil {
 		log.Fatalf("connect to MongoDB: %v", err)
 	}
@@ -44,7 +44,15 @@ func main() {
 		log.Fatalf("ping MongoDB: %v", err)
 	}
 
-	api, err := newAPI(client.Database(databaseName(mongoURI)), []byte(jwtSecret))
+	database := client.Database(databaseName(mongoURI))
+	if err := migrateUserIDs(ctx, database); err != nil {
+		log.Fatalf("migrate user IDs to UUID: %v", err)
+	}
+	mailer, err := newResendMailerFromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
+	api, err := newAPI(database, []byte(jwtSecret), mailer)
 	if err != nil {
 		log.Fatal(err)
 	}
