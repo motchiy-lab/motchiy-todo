@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/backup_service.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/task_cache_service.dart';
@@ -153,6 +156,17 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
       _tasks = tasks;
       _isLoading = false;
     });
+    final userId = AuthService.instance.currentUser?.id;
+    if (userId != null) unawaited(_createDailyBackup(userId, tasks));
+  }
+
+  Future<void> _createDailyBackup(String userId, List<Task> tasks) async {
+    try {
+      if (AuthService.instance.currentUser?.id != userId) return;
+      await BackupService.instance.createDailyBackup(userId, tasks);
+    } catch (error) {
+      debugPrint('Could not create local task backup: $error');
+    }
   }
 
   Future<void> _saveTasks() async {

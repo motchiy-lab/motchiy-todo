@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
 import '../models/app_user.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../services/backup_service.dart';
 import '../services/desktop_window_service.dart';
 import '../services/startup_service.dart';
+import '../services/task_cache_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -19,6 +22,17 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isAccountActionRunning = false;
   bool _isRefreshing = false;
+  bool _isLoadingBackupSettings = true;
+  bool _isCreatingBackup = false;
+  bool _dailyBackupEnabled = true;
+  int _backupRetentionDays = 30;
+  DateTime? _latestBackup;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBackupSettings();
+  }
 
   bool get _isMobile =>
       !kIsWeb &&
@@ -35,6 +49,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.windows ||
           defaultTargetPlatform == TargetPlatform.linux);
+
+  Future<void> _loadBackupSettings() async {
+    try {
+      final settings = await BackupService.instance.getSettings();
+      final userId = AuthService.instance.currentUser?.id;
+      final latestBackup = userId == null
+          ? null
+          : await BackupService.instance.latestBackupTime(userId);
+      if (!mounted) return;
+      setState(() {
+        _dailyBackupEnabled = settings.dailyEnabled;
+        _backupRetentionDays = settings.retentionDays;
+        _latestBackup = latestBackup;
+        _isLoadingBackupSettings = false;
+      });
+    } catch (error) {
+      debugPrint('Could not load local backup settings: $error');
+      if (mounted) setState(() => _isLoadingBackupSettings = false);
+    }
+  }
+
+  Future<void> _changeDailyBackup(bool enabled) async {
+    try {
+      await BackupService.instance.setDailyEnabled(enabled);
+      if (mounted) setState(() => _dailyBackupEnabled = enabled);
+    } catch (error) {
+      _showBackupError(error);
+    }
+  }
+
+  Future<void> _changeBackupRetention(int days) async {
+    try {
+      await BackupService.instance.setRetentionDays(days);
+      if (mounted) setState(() => _backupRetentionDays = days);
+    } catch (error) {
+      _showBackupError(error);
+    }
+  }
+
+  Future<void> _createBackupNow() async {
+    final userId = AuthService.instance.currentUser?.id;
+    if (userId == null || _isCreatingBackup) return;
+    setState(() => _isCreatingBackup = true);
+    try {
+      final cachedTasks = await TaskCacheService.instance.readTasks(userId);
+      final tasks = cachedTasks ?? await ApiService.instance.getTasks();
+      await BackupService.instance.createBackup(userId, tasks);
+      final latestBackup = await BackupService.instance.latestBackupTime(
+        userId,
+      );
+      if (mounted) {
+        setState(() => _latestBackup = latestBackup);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('ローカルバックアップを作成しました')));
+      }
+    } catch (error) {
+      _showBackupError(error);
+    } finally {
+      if (mounted) setState(() => _isCreatingBackup = false);
+    }
+  }
+
+  void _showBackupError(Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('ローカルバックアップを処理できませんでした: $error')));
+  }
 
   Future<void> _saveApiSettings(Map<String, dynamic> settings) async {
     try {
@@ -305,6 +386,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const SizedBox(height: 8),
                   _buildAccountSection(isDark),
+                  if (!kIsWeb) ...[
+                    const SizedBox(height: 32),
+                    _buildBackupSection(isDark),
+                  ],
                   if (_isDesktop) ...[
                     const SizedBox(height: 32),
                     const Text(
@@ -529,6 +614,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildBackupSection(bool isDark) {
+    final latestBackup = _latestBackup;
+    final userId = AuthService.instance.currentUser?.id;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'ローカルバックアップ',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'タスクとテーマ設定をこの端末に保存します。アカウントごとに分けて保存されます。',
+          style: TextStyle(
+            fontSize: 12,
+            color: isDark ? Colors.grey[400] : Colors.grey[600],
+          ),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('毎日自動バックアップ'),
+          subtitle: const Text('タスクを読み込んだとき、1日1回バックアップします'),
+          value: _dailyBackupEnabled,
+          onChanged: _isLoadingBackupSettings ? null : _changeDailyBackup,
+        ),
+        InputDecorator(
+          decoration: const InputDecoration(labelText: '保持期間'),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              value: _backupRetentionDays,
+              isExpanded: true,
+              items: BackupService.retentionOptions
+                  .map(
+                    (days) => DropdownMenuItem<int>(
+                      value: days,
+                      child: Text('$days日'),
+                    ),
+                  )
+                  .toList(),
+              onChanged: _isLoadingBackupSettings
+                  ? null
+                  : (days) {
+                      if (days != null) _changeBackupRetention(days);
+                    },
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.backup_outlined),
+          title: const Text('最新のバックアップ'),
+          subtitle: Text(
+            latestBackup == null
+                ? 'まだ作成されていません'
+                : DateFormat.yMd().add_Hm().format(latestBackup.toLocal()),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: _isCreatingBackup || userId == null
+                ? null
+                : _createBackupNow,
+            icon: _isCreatingBackup
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save_alt),
+            label: const Text('今すぐバックアップ'),
+          ),
+        ),
+      ],
     );
   }
 
