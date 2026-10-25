@@ -2,8 +2,8 @@
 
 Flutterで作成したタスク管理アプリです。Windows、Android、Linux、Webに対応しています。
 メールアドレスとパスワードによる認証、およびタスク・設定の同期にはMongoDBを使うREST
-APIを利用します。REST APIサーバーはこのリポジトリには含まれていないため、別途作成・
-デプロイしてください。APIの仕様はOpenAPIファイルと以下の説明を参照してください。
+APIを利用します。REST APIサーバーの実装は `server/` にあります。MongoDBとResendを設定し、
+サーバーを別途デプロイしてください。APIの仕様はOpenAPIファイルと以下の説明を参照してください。
 FirebaseとGoogleログインは使用しません。
 
 ## ダウンロードして利用する
@@ -23,7 +23,7 @@ Windows/Linux版は、設定の「タスクトレイに格納する」を有効�
 
 ### Windows
 
-MSIXはWindows 10/11向けです。`tool\build_all.ps1` は初回ビルド時に開発用の
+MSIXはWindows 10/11向けです。`tool\build.ps1` は初回ビルド時に開発用の
 自己署名証明書を現在のユーザーの証明書ストアへ作成し、MSIXへ署名します。
 成果物には公開証明書 `motchiy-todo-publisher.cer` も出力されるため、インストール
 する各Windows端末でこのファイルを「現在のユーザー > 信頼されたルート証明機関」に
@@ -85,7 +85,7 @@ flutter pub get
 
 `server/` にGinとMongoDBを使ったAPIサーバーがあります。MongoDBへ接続し、Resendでの
 メールアドレス認証、タスク・設定のユーザー別保存を行います。
-サーバーは `127.0.0.1:3000` のみにバインドし、
+サーバーは `localhost:11001` のみにバインドし、すべてのAPIパスに `/todo-app/` を付けます。
 Cloudflare Tunnelからローカルへ転送する構成です。
 
 Go 1.23以降とMongoDBを用意してから、`.env.example` を `.env` にコピーし、接続文字列、
@@ -116,20 +116,20 @@ MongoDBをローカル起動している場合、接続先は `mongodb://127.0.0
 Windowsで既存の `.env` に `localhost` を指定していて接続に失敗する場合は、`127.0.0.1` に変更してください。
 MongoDBへ接続できないとき、APIは最大3秒でHTTP 503を返します。
 
-APIは `http://127.0.0.1:3000/health` でヘルスチェックできます。
+APIは `http://localhost:11001/todo-app/health` でヘルスチェックできます。
 公開API URLを `https://api.motchiy.com` とする場合は、Cloudflare Tunnelのホスト名を
-ローカルの `http://127.0.0.1:3000` に接続してください。APIはドメイン直下のパスで動作します。
+ローカルの `http://localhost:11001` に接続してください。公開側のパスにも `/todo-app/` が必要です。
 
 ローカルサーバーへFlutterアプリから接続して試す場合:
 
 ```powershell
-flutter run --dart-define=API_BASE_URL=http://localhost:3000
+flutter run --dart-define=API_BASE_URL=http://localhost:11001
 ```
 
 Quick Tunnelで一時的に試す場合:
 
 ```powershell
-cloudflared tunnel --url http://127.0.0.1:3000
+cloudflared tunnel --url http://localhost:11001
 ```
 
 本番利用ではQuick Tunnelではなく、Cloudflare Zero Trustで名前付きTunnelを作成し、DNS名を
@@ -149,7 +149,7 @@ tunnel: <TUNNEL-ID>
 credentials-file: C:\Users\<ユーザー名>\.cloudflared\<TUNNEL-ID>.json
 ingress:
   - hostname: api.motchiy.com
-    service: http://127.0.0.1:3000
+    service: http://localhost:11001
   - service: http_status:404
 ```
 
@@ -175,7 +175,7 @@ Cloudflare側でもレート制限やWAFを設定し、MongoDBをインターネ
 OpenAPI 3.1形式の仕様は [`openapi.yaml`](openapi.yaml) にあります。
 サーバー実装やクライアント生成、API契約の確認に利用できます。
 
-アプリに設定するベースURL配下に、次のJSON APIを実装します。認証以外のデータAPIには
+アプリに設定するベースURLの `/todo-app/` 配下に、次のJSON APIを実装します。認証以外のデータAPIには
 すべて `Authorization: Bearer <accessToken>` を要求します。成功時のログイン応答は
 `accessToken`（15分の有効期限）、`refreshToken`、`expiresIn`（秒）、`user`（`id`、
 `email`、`displayName`、`photoUrl`）を含むJSONです。エラーは
@@ -183,17 +183,17 @@ OpenAPI 3.1形式の仕様は [`openapi.yaml`](openapi.yaml) にあります。
 
 | Method / path | 要件 |
 | --- | --- |
-| `POST /auth/register` | `{ "email", "password", "displayName" }` を受け取り、メールアドレスを正規化して一意性を検証する。パスワードは12文字以上128バイト以下。ソルト付きscrypt等の適切なパスワードハッシュで保存し、Resendで6桁の認証コードを送信する。HTTP 202を返す。 |
-| `POST /auth/verification/resend` | `{ "email" }` を受け取り、未認証アカウントがあれば確認コードを再送する。アカウント有無を応答から判別できないようにし、IP・メールアドレス単位で回数を制限する。 |
-| `POST /auth/verify-email` | `{ "email", "code" }` を受け取り、15分以内の認証コードを検証する。正しいコードならメール認証を完了し、ログイン応答を返す。 |
-| `POST /auth/login` | `{ "email", "password" }` を検証する。未認証のアカウントにはHTTP 403を返し、認証済みならセッションを発行する。 |
-| `POST /auth/refresh` | `{ "refreshToken" }` を検証し、古いトークンを一度だけ使えるよう失効・ローテーションして新しいログイン応答を返す。DBにはトークンそのものではなくハッシュを保存する。 |
-| `POST /auth/logout` | 認証中セッションだけを失効させる。 |
-| `GET /tasks` | 認証中ユーザーの `{ "tasks": [...] }` を返す。 |
-| `PUT /tasks` | `{ "tasks": [...] }` で認証中ユーザーのタスク一覧だけを置き換える。 |
-| `GET /settings` | 認証中ユーザーの設定を返す。未保存時は `themeColorIndex: 0`、`themeModeIndex: 0`、`enableTabAnimations: true` を返す。 |
-| `PATCH /settings` | 許可された設定項目だけを認証中ユーザーの設定へ部分更新する。 |
-| `GET /health` | APIの稼働状況を返す。監視にDB接続確認が必要な場合はReadiness用の確認も実装する。 |
+| `POST /todo-app/auth/register` | `{ "email", "password", "displayName" }` を受け取り、メールアドレスを正規化して一意性を検証する。パスワードは12文字以上128バイト以下。ソルト付きscrypt等の適切なパスワードハッシュで保存し、Resendで6桁の認証コードを送信する。HTTP 202を返す。 |
+| `POST /todo-app/auth/verification/resend` | `{ "email" }` を受け取り、未認証アカウントがあれば確認コードを再送する。アカウント有無を応答から判別できないようにし、IP・メールアドレス単位で回数を制限する。 |
+| `POST /todo-app/auth/verify-email` | `{ "email", "code" }` を受け取り、15分以内の認証コードを検証する。正しいコードならメール認証を完了し、ログイン応答を返す。 |
+| `POST /todo-app/auth/login` | `{ "email", "password" }` を検証する。未認証のアカウントにはHTTP 403を返し、認証済みならセッションを発行する。 |
+| `POST /todo-app/auth/refresh` | `{ "refreshToken" }` を検証し、古いトークンを一度だけ使えるよう失効・ローテーションして新しいログイン応答を返す。DBにはトークンそのものではなくハッシュを保存する。 |
+| `POST /todo-app/auth/logout` | 認証中セッションだけを失効させる。 |
+| `GET /todo-app/tasks` | 認証中ユーザーの `{ "tasks": [...] }` を返す。 |
+| `PUT /todo-app/tasks` | `{ "tasks": [...] }` で認証中ユーザーのタスク一覧だけを置き換える。 |
+| `GET /todo-app/settings` | 認証中ユーザーの設定を返す。未保存時は `themeColorIndex: 0`、`themeModeIndex: 0`、`enableTabAnimations: true` を返す。 |
+| `PATCH /todo-app/settings` | 許可された設定項目だけを認証中ユーザーの設定へ部分更新する。 |
+| `GET /todo-app/health` | APIの稼働状況を返す。監視にDB接続確認が必要な場合はReadiness用の確認も実装する。 |
 
 アクセストークンは署名・有効期限・issuer・audienceを検証し、その `sub` と有効なサーバー側
 セッションからユーザーを特定します。セッション失効もデータAPIごとに反映してください。
@@ -263,7 +263,7 @@ Flutterアプリへ埋め込んではいけません。アプリに埋め込む�
 
 リリースビルドにはデプロイ済みHTTPS APIのベースURL（例: `https://todo-api.example.com`）が必須です。
 APIはドメイン直下のパスで公開します。プレースホルダーURLのままでは
-ビルドできないようにしてあり、API URLは `tool/build_platforms.json` の `apiBaseUrl` に
+ビルドできないようにしてあり、API URLは `tool/build.json` の `apiBaseUrl` に
 設定します。URLはコンパイル時にアプリへ埋め込まれます。Windowsで選択中のWindows、
 Android、Linux向け成果物を作る例:
 
@@ -271,10 +271,10 @@ Android、Linux向け成果物を作る例:
 .\tool\build.ps1
 ```
 
-`tool/build_platforms.json` の `apiBaseUrl` に実際のHTTPS API URLを書き込んでください。
+`tool/build.json` の `apiBaseUrl` に実際のHTTPS API URLを書き込んでください。
 コマンドライン引数 `-ApiBaseUrl` を指定した場合は、ファイルの設定より優先されます。
 
-既定ではMSIX、APK、Linux tar.gzを `dist/` に作成します。`tool/build_platforms.json` の
+既定ではMSIX、APK、Linux tar.gzを `dist/` に作成します。`tool/build.json` の
 `platforms` 配列で対象を選びます。Windows MSIXは開発用自己署名証明書で署名され、
 `motchiy-todo-publisher.cer` が出力されます。受け取る側はインストール前に発行者証明書を
 信頼する必要があります。広く配布する場合は、Windows署名証明書を用意してください。
@@ -282,10 +282,10 @@ Android APKは現在のGradle設定により開発用署名で作成されます
 Google Playや継続的な本番アップデートには専用のリリース署名鍵と本番用アプリIDを設定して
 ください。署名鍵は安全にバックアップし、リポジトリや配布物に含めないでください。
 
-Windows用Flutterバンドルだけを作る場合:
+Windows向けMSIXだけを作る場合:
 
 ```powershell
-.\tool\build.ps1 -ApiBaseUrl https://todo-api.example.com
+.\tool\build.ps1 -ApiBaseUrl https://todo-api.example.com -Platforms windows
 ```
 
 APKまたはWeb版をFlutterから個別にビルドする場合は、同じAPI URLを渡してください。
@@ -296,15 +296,15 @@ flutter build web --release --dart-define=API_BASE_URL=https://todo-api.example.
 ```
 
 たとえばベースURLが `https://todo-api.example.com` の場合、アプリは
-`https://todo-api.example.com/auth/login` や
-`https://todo-api.example.com/tasks` に接続します。サーバー側またはリバース
+`https://todo-api.example.com/todo-app/auth/login` や
+`https://todo-api.example.com/todo-app/tasks` に接続します。サーバー側またはリバース
 プロキシ側でも、これらのパスでAPIを受け付けるようにしてください。Linux版もLinux/WSLに
 Flutter環境を用意してAPI URL付きでビルドできます。各配布物の接続先を変えるには、API URLを
 指定し直して再ビルドが必要です。
 
 ## プラットフォームを選択したビルド
 
-ビルドするプラットフォームは `tool/build_platforms.json` で選択できます。
+ビルドするプラットフォームは `tool/build.json` で選択できます。
 `platforms` 配列に `windows`、`android`、`linux`、`web` のうち必要なものを指定してください。
 初期設定ではWindows、Android、Linuxをビルドします。たとえばWindowsとAndroidだけに
 する場合は次のように設定します。一時的にコマンドラインで対象を上書きする場合は
@@ -325,7 +325,7 @@ WindowsのPowerShellから、設定されたプラットフォームをまとめ
 サブディレクトリはすべて削除されます。残したい成果物がある場合は別の出力先を指定してください。
 
 ```powershell
-.\tool\build_all.ps1 `
+.\tool\build.ps1 `
   -ApiBaseUrl https://todo-api.example.com `
   -OutputDirectory dist\release-2.0.0
 ```
@@ -337,7 +337,7 @@ Linux用Flutterをインストールし、`/home/motchiy/development/flutter/bin
 選択されていてもその実行ではLinux版を省略できます。
 
 ```powershell
-.\tool\build_all.ps1 `
+.\tool\build.ps1 `
   -ApiBaseUrl https://todo-api.example.com `
   -OutputDirectory dist\release-2.0.0 `
   -SkipLinux
@@ -348,7 +348,7 @@ Linux用Flutterをインストールし、`/home/motchiy/development/flutter/bin
 `version` を使用します。
 
 ```powershell
-.\tool\build_all.ps1 `
+.\tool\build.ps1 `
   -ApiBaseUrl https://todo-api.example.com `
   -OutputDirectory dist\release-1.2.3 `
   -Version 1.2.3+4
@@ -357,7 +357,7 @@ Linux用Flutterをインストールし、`/home/motchiy/development/flutter/bin
 追加のFlutter引数は、スクリプトの末尾へ渡せます。
 
 ```powershell
-.\tool\build_all.ps1 `
+.\tool\build.ps1 `
   -ApiBaseUrl https://todo-api.example.com `
   -OutputDirectory dist\release-2.0.0 `
   -SkipLinux --verbose

@@ -46,8 +46,8 @@ class ApiService {
             (base.host == 'localhost' || base.host == '127.0.0.1'))) {
       throw const ApiException('API接続先にはHTTPSを指定してください。');
     }
-    final baseUrl = apiBaseUrl.endsWith('/') ? apiBaseUrl : '$apiBaseUrl/';
-    return Uri.parse(baseUrl).resolve(path.replaceFirst(RegExp(r'^/+'), ''));
+    final endpointPath = path.replaceFirst(RegExp(r'^/+'), '');
+    return base.resolve('/todo-app/$endpointPath');
   }
 
   Future<dynamic> postPublic(String path, Map<String, dynamic> body) async {

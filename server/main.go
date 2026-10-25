@@ -66,9 +66,9 @@ func main() {
 	router.Use(corsMiddleware(strings.Split(os.Getenv("WEB_ORIGINS"), ",")))
 	api.registerRoutes(router)
 
-	listener, err := net.Listen("tcp", "127.0.0.1:3000")
+	listener, err := net.Listen("tcp", "localhost:11001")
 	if err != nil {
-		log.Fatalf("listen on 127.0.0.1:3000: %v", err)
+		log.Fatalf("listen on localhost:11001: %v", err)
 	}
 	server := &http.Server{
 		Handler:           router,
@@ -77,7 +77,7 @@ func main() {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	log.Printf("Motchiy ToDo API listening on http://127.0.0.1:3000")
+	log.Printf("Motchiy ToDo API listening on http://localhost:11001")
 	if err := server.Serve(listener); !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("serve API: %v", err)
 	}

@@ -126,7 +126,7 @@ func (a *api) ensureIndexes(ctx context.Context) error {
 }
 
 func (a *api) registerRoutes(router *gin.Engine) {
-	group := router.Group("")
+	group := router.Group("/todo-app")
 	group.GET("/health", a.health)
 	group.POST("/auth/register", a.rateLimit("register"), a.register)
 	group.POST("/auth/verification/resend", a.rateLimit("resend"), a.resendVerification)

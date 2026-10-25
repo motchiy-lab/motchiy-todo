@@ -15,7 +15,7 @@ tags:
   - name: タスク
   - name: 設定
 paths:
-  /health:
+  /todo-app/health:
     get:
       tags: [ヘルスチェック]
       operationId: health
@@ -35,7 +35,7 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
-  /auth/register:
+  /todo-app/auth/register:
     post:
       tags: [認証]
       operationId: register
@@ -79,7 +79,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /auth/verification/resend:
+  /todo-app/auth/verification/resend:
     post:
       tags: [認証]
       operationId: resendVerificationCode
@@ -112,7 +112,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /auth/verify-email:
+  /todo-app/auth/verify-email:
     post:
       tags: [認証]
       operationId: verifyEmail
@@ -146,7 +146,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /auth/login:
+  /todo-app/auth/login:
     post:
       tags: [認証]
       operationId: login
@@ -185,7 +185,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /auth/refresh:
+  /todo-app/auth/refresh:
     post:
       tags: [認証]
       operationId: refreshSession
@@ -216,7 +216,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /auth/logout:
+  /todo-app/auth/logout:
     post:
       tags: [認証]
       operationId: logout
@@ -231,7 +231,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /tasks:
+  /todo-app/tasks:
     get:
       tags: [タスク]
       operationId: getTasks
@@ -294,7 +294,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /settings:
+  /todo-app/settings:
     get:
       tags: [設定]
       operationId: getSettings
@@ -394,7 +394,7 @@ components:
           description: 900秒間有効なBearerアクセストークン。
         refreshToken:
           type: string
-          description: 不透明なリフレッシュトークン。POST /auth/refreshで更新してください。
+          description: 不透明なリフレッシュトークン。POST /todo-app/auth/refreshで更新してください。
         expiresIn:
           type: integer
           const: 900
