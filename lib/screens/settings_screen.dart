@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart' as file_selector;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
@@ -148,18 +148,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _pickBackupFile() async {
     if (_isRestoringBackup) return;
     try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-        withData: true,
+      final file = await file_selector.openFile(
+        acceptedTypeGroups: const [
+          file_selector.XTypeGroup(label: 'JSON', extensions: ['json']),
+        ],
       );
-      if (result == null || result.files.isEmpty) return;
-      final file = result.files.single;
-      final bytes = file.bytes;
-      if (bytes == null) {
-        throw const FormatException('選択したJSONファイルを読み込めませんでした。');
-      }
-      await _restoreFromJson(utf8.decode(bytes), sourceName: file.name);
+      if (file == null) return;
+      await _restoreFromJson(
+        utf8.decode(await file.readAsBytes()),
+        sourceName: file.name,
+      );
     } catch (error) {
       _showBackupError(error);
     }
