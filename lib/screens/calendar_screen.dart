@@ -57,6 +57,7 @@ class CalendarScreenState extends State<CalendarScreen> {
     List<Task> loadedTasks = [];
     final cache = TaskCacheService.instance;
     List<Task>? cachedTasks;
+    List<Task>? reconciledTasks;
     try {
       cachedTasks = await cache.readTasks(userId);
     } on FormatException catch (error) {
@@ -64,28 +65,22 @@ class CalendarScreenState extends State<CalendarScreen> {
       await cache.clearTasks(userId);
     }
     try {
-      if (await cache.hasPendingSync(userId) && cachedTasks != null) {
-        await ApiService.instance.replaceTasks(cachedTasks);
+      final remoteTasks = await ApiService.instance.getTasks();
+      if (AuthService.instance.currentUser?.id != userId) return;
+      reconciledTasks = cache.mergeTasks(remoteTasks, cachedTasks ?? []);
+      loadedTasks = reconciledTasks;
+      if (cache.sameTasks(remoteTasks, reconciledTasks)) {
+        await cache.saveRemoteTasks(userId, reconciledTasks);
+      } else {
+        await cache.saveLocalTasks(userId, reconciledTasks);
+        await ApiService.instance.replaceTasks(reconciledTasks);
         if (AuthService.instance.currentUser?.id != userId) return;
         await cache.markSynced(userId);
-        loadedTasks = cachedTasks;
-      } else {
-        loadedTasks = await ApiService.instance.getTasks();
-        if (AuthService.instance.currentUser?.id != userId) return;
-        if (loadedTasks.isNotEmpty) {
-          await cache.saveRemoteTasks(userId, loadedTasks);
-        } else {
-          loadedTasks = cachedTasks ?? [];
-          await cache.saveLocalTasks(userId, loadedTasks);
-          await ApiService.instance.replaceTasks(loadedTasks);
-          if (AuthService.instance.currentUser?.id != userId) return;
-          await cache.markSynced(userId);
-        }
       }
     } catch (error) {
       if (AuthService.instance.currentUser?.id != userId) return;
       debugPrint('Could not load tasks from API; using local cache: $error');
-      loadedTasks = cachedTasks ?? [];
+      loadedTasks = reconciledTasks ?? cachedTasks ?? [];
       await cache.saveLocalTasks(userId, loadedTasks);
     }
 

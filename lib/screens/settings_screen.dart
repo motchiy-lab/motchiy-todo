@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
@@ -5,9 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
 import '../models/app_user.dart';
+import '../models/task.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/backup_service.dart';
+import '../services/backup_storage.dart';
 import '../services/desktop_window_service.dart';
 import '../services/startup_service.dart';
 import '../services/task_cache_service.dart';
@@ -24,6 +29,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isRefreshing = false;
   bool _isLoadingBackupSettings = true;
   bool _isCreatingBackup = false;
+  bool _isRestoringBackup = false;
   bool _isCheckingServerConnection = false;
   bool? _serverConnected;
   String? _serverConnectionError;
@@ -137,6 +143,170 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } finally {
       if (mounted) setState(() => _isCreatingBackup = false);
     }
+  }
+
+  Future<void> _pickBackupFile() async {
+    if (_isRestoringBackup) return;
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null) {
+        throw const FormatException('選択したJSONファイルを読み込めませんでした。');
+      }
+      await _restoreFromJson(utf8.decode(bytes), sourceName: file.name);
+    } catch (error) {
+      _showBackupError(error);
+    }
+  }
+
+  Future<void> _chooseSavedBackup() async {
+    final userId = AuthService.instance.currentUser?.id;
+    if (userId == null || _isRestoringBackup) return;
+    try {
+      final backups = await BackupService.instance.listBackups(userId);
+      if (!mounted) return;
+      if (backups.isEmpty) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('選択できるバックアップがありません')));
+        return;
+      }
+      final selected = await showDialog<BackupFile>(
+        context: context,
+        builder: (context) => SimpleDialog(
+          title: const Text('復元するバックアップを選択'),
+          children: backups
+              .map(
+                (backup) => SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, backup),
+                  child: Text(
+                    DateFormat.yMd().add_Hm().format(
+                      backup.modifiedAt.toLocal(),
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      );
+      if (selected == null) return;
+      final contents = await BackupService.instance.readBackup(selected.path);
+      await _restoreFromJson(
+        contents,
+        sourceName: selected.path.split(RegExp(r'[/\\]')).last,
+      );
+    } catch (error) {
+      _showBackupError(error);
+    }
+  }
+
+  Future<void> _restoreFromJson(
+    String contents, {
+    required String sourceName,
+  }) async {
+    final userId = AuthService.instance.currentUser?.id;
+    if (userId == null || _isRestoringBackup) return;
+    final backup = BackupService.decodeBackup(contents);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('バックアップを復元しますか？'),
+        content: Text(
+          '$sourceName から${backup.tasks.length}件の予定を読み込みます。'
+          '現在の予定は削除せず統合します。同じIDで内容が異なる予定も両方残します。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('統合して復元'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _isRestoringBackup = true);
+    try {
+      final cache = TaskCacheService.instance;
+      List<Task>? cachedTasks;
+      try {
+        cachedTasks = await cache.readTasks(userId);
+      } on FormatException catch (error) {
+        debugPrint('Ignoring invalid local task cache during restore: $error');
+        await cache.clearTasks(userId);
+      }
+
+      List<Task> remoteTasks = [];
+      var remoteAvailable = true;
+      try {
+        remoteTasks = await ApiService.instance.getTasks();
+      } catch (error) {
+        remoteAvailable = false;
+        debugPrint('Could not read remote tasks during restore: $error');
+      }
+      if (AuthService.instance.currentUser?.id != userId) return;
+
+      final localAndBackup = cache.mergeTasks(cachedTasks ?? [], backup.tasks);
+      final restoredTasks = cache.mergeTasks(remoteTasks, localAndBackup);
+      await cache.saveLocalTasks(userId, restoredTasks);
+      var synced = false;
+      if (remoteAvailable) {
+        try {
+          await ApiService.instance.replaceTasks(restoredTasks);
+          await cache.markSynced(userId);
+          synced = true;
+        } catch (error) {
+          debugPrint('Restored tasks are waiting to sync: $error');
+        }
+      }
+      await _restoreBackupSettings(backup.settings);
+      if (!mounted) return;
+      final status = synced
+          ? 'サーバーと端末に復元しました'
+          : '端末に復元しました。サーバー同期は次回の通信時に再試行します';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$status（${restoredTasks.length}件）')),
+      );
+    } catch (error) {
+      _showBackupError(error);
+    } finally {
+      if (mounted) setState(() => _isRestoringBackup = false);
+    }
+  }
+
+  Future<void> _restoreBackupSettings(Map<String, Object?>? settings) async {
+    if (settings == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final updates = <String, dynamic>{};
+    final themeIndex = settings['themeColorIndex'];
+    if (themeIndex is int && themeIndex >= 0 && themeIndex < appThemes.length) {
+      themeIndexNotifier.value = themeIndex;
+      await prefs.setInt('theme_color_index', themeIndex);
+      updates['themeColorIndex'] = themeIndex;
+    }
+    final themeModeIndex = settings['themeModeIndex'];
+    if (themeModeIndex is int &&
+        themeModeIndex >= 0 &&
+        themeModeIndex < ThemeMode.values.length) {
+      themeModeNotifier.value = ThemeMode.values[themeModeIndex];
+      await prefs.setInt('theme_mode_index', themeModeIndex);
+      updates['themeModeIndex'] = themeModeIndex;
+    }
+    final animations = settings['enableTabAnimations'];
+    if (animations is bool) {
+      enableTabAnimationsNotifier.value = animations;
+      await prefs.setBool('enable_tab_animations', animations);
+      updates['enableTabAnimations'] = animations;
+    }
+    if (updates.isNotEmpty) await _saveApiSettings(updates);
   }
 
   void _showBackupError(Object error) {
@@ -783,7 +953,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Align(
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
-            onPressed: _isCreatingBackup || userId == null
+            onPressed: _isCreatingBackup || _isRestoringBackup || userId == null
                 ? null
                 : _createBackupNow,
             icon: _isCreatingBackup
@@ -796,6 +966,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
             label: const Text('今すぐバックアップ'),
           ),
         ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _isRestoringBackup || _isCreatingBackup
+                  ? null
+                  : _pickBackupFile,
+              icon: const Icon(Icons.folder_open),
+              label: const Text('JSONファイルから復元'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _isRestoringBackup || _isCreatingBackup
+                  ? null
+                  : _chooseSavedBackup,
+              icon: const Icon(Icons.history),
+              label: const Text('保存済みバックアップから復元'),
+            ),
+          ],
+        ),
+        if (_isRestoringBackup)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(),
+          ),
       ],
     );
   }

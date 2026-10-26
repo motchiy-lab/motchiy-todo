@@ -77,6 +77,45 @@ class TaskCacheService {
     }
   }
 
+  List<Task> mergeTasks(List<Task> preferred, List<Task> preserved) {
+    final merged = List<Task>.of(preferred);
+    final tasksById = <String, Task>{for (final task in merged) task.id: task};
+    for (final task in preserved) {
+      final existing = tasksById[task.id];
+      if (existing == null) {
+        merged.add(task);
+        tasksById[task.id] = task;
+        continue;
+      }
+      if (jsonEncode(existing.toJson()) == jsonEncode(task.toJson())) continue;
+
+      final baseId = '${task.id}_preserved';
+      var preservedId = baseId;
+      var suffix = 2;
+      while (tasksById.containsKey(preservedId)) {
+        final candidate = tasksById[preservedId]!;
+        if (jsonEncode(candidate.toJson()) ==
+            jsonEncode({...task.toJson(), 'id': preservedId})) {
+          preservedId = '';
+          break;
+        }
+        preservedId = '${baseId}_${suffix++}';
+      }
+      if (preservedId.isEmpty) continue;
+      final preservedTask = Task.fromJson({
+        ...task.toJson(),
+        'id': preservedId,
+      });
+      merged.add(preservedTask);
+      tasksById[preservedId] = preservedTask;
+    }
+    return merged;
+  }
+
+  bool sameTasks(List<Task> left, List<Task> right) =>
+      jsonEncode(left.map((task) => task.toJson()).toList()) ==
+      jsonEncode(right.map((task) => task.toJson()).toList());
+
   List<Task> _decodeTasks(String encoded) {
     final decoded = jsonDecode(encoded);
     if (decoded is! List) {

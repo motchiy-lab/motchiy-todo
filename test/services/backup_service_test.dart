@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motchiy_todo/models/task.dart';
+import 'package:motchiy_todo/services/backup_service.dart';
 import 'package:motchiy_todo/services/backup_storage_io.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -59,6 +60,40 @@ void main() {
     expect(contents['userId'], 'user-1');
     expect(contents['tasks'][0]['title'], 'Important task');
     expect(contents['settings']['themeColorIndex'], 0);
+  });
+
+  test('lists and reads the account backup files newest first', () async {
+    await service.createBackup('user-1', [
+      Task(id: 'task-1', title: 'Restorable'),
+    ]);
+
+    final backups = await service.listBackups('user-1');
+
+    expect(backups, hasLength(1));
+    expect(
+      jsonDecode(
+        await service.readBackup(backups.single.path),
+      )['tasks'][0]['title'],
+      'Restorable',
+    );
+  });
+
+  test('decodes app backups and plain JSON task arrays', () {
+    final backup = BackupService.decodeBackup(
+      jsonEncode({
+        'formatVersion': 1,
+        'tasks': [Task(id: 'task-1', title: 'Restorable').toJson()],
+        'settings': {'themeColorIndex': 2},
+      }),
+    );
+    expect(backup.tasks.single.title, 'Restorable');
+    expect(backup.settings?['themeColorIndex'], 2);
+
+    final plainTasks = BackupService.decodeBackup(
+      jsonEncode([Task(id: 'task-2', title: 'Imported').toJson()]),
+    );
+    expect(plainTasks.tasks.single.title, 'Imported');
+    expect(plainTasks.settings, isNull);
   });
 
   test('retention changes remove only expired backup files', () async {

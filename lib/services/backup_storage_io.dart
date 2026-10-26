@@ -108,6 +108,23 @@ class FileBackupStorage implements BackupStorage {
     return latest;
   }
 
+  @override
+  Future<List<BackupFile>> listBackups(String userId) async {
+    final directory = await _userBackupDirectory(userId);
+    final backups = <BackupFile>[];
+    await for (final entity in directory.list(followLinks: false)) {
+      if (entity is! File || !_isBackupFile(entity.path)) continue;
+      backups.add(
+        BackupFile(path: entity.path, modifiedAt: await entity.lastModified()),
+      );
+    }
+    backups.sort((left, right) => right.modifiedAt.compareTo(left.modifiedAt));
+    return backups;
+  }
+
+  @override
+  Future<String> readBackup(String path) => File(path).readAsString();
+
   Future<Directory> _userBackupDirectory(String userId) async {
     final root = rootDirectory ?? await getApplicationSupportDirectory();
     final directory = Directory(

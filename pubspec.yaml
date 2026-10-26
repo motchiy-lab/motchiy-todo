@@ -1,7 +1,7 @@
 name: motchiy_todo
 description: "カレンダーとメモ帳の中間をとったタスク管理アプリ"
 publish_to: 'none'
-version: 2.2.0
+version: 2.3.0
 
 environment:
   sdk: ^3.13.3
@@ -19,6 +19,7 @@ dependencies:
   url_launcher: ^6.3.2
   window_manager: ^0.4.3
   path_provider: ^2.1.6
+  file_picker: ^11.0.3
 
 dev_dependencies:
   flutter_test:

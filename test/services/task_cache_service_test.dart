@@ -37,4 +37,27 @@ void main() {
     await cache.markSynced('user-1');
     expect(await cache.hasPendingSync('user-1'), isFalse);
   });
+
+  test('merges different task sets without dropping conflicting versions', () {
+    final cache = TaskCacheService.instance;
+    final remote = [
+      Task(id: 'shared', title: 'Server version'),
+      Task(id: 'remote-only', title: 'Server only'),
+    ];
+    final local = [
+      Task(id: 'shared', title: 'Local version'),
+      Task(id: 'local-only', title: 'Local only'),
+    ];
+
+    final merged = cache.mergeTasks(remote, local);
+
+    expect(merged.map((task) => task.title), [
+      'Server version',
+      'Server only',
+      'Local version',
+      'Local only',
+    ]);
+    expect(merged[2].id, 'shared_preserved');
+    expect(cache.sameTasks(merged, cache.mergeTasks(merged, local)), isTrue);
+  });
 }

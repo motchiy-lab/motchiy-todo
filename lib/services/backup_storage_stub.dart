@@ -30,4 +30,12 @@ class _UnsupportedBackupStorage implements BackupStorage {
 
   @override
   Future<DateTime?> latestBackupTime(String userId) async => null;
+
+  @override
+  Future<List<BackupFile>> listBackups(String userId) async => [];
+
+  @override
+  Future<String> readBackup(String path) async {
+    throw UnsupportedError('Local backups are not supported on this platform.');
+  }
 }

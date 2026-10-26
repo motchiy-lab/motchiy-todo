@@ -100,6 +100,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
     if (userId == null) return;
     final cache = TaskCacheService.instance;
     List<Task>? cachedTasks;
+    List<Task>? reconciledTasks;
     try {
       cachedTasks = await cache.readTasks(userId);
     } on FormatException catch (error) {
@@ -107,30 +108,22 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
       await cache.clearTasks(userId);
     }
     try {
-      if (await cache.hasPendingSync(userId) && cachedTasks != null) {
-        await ApiService.instance.replaceTasks(cachedTasks);
-        if (AuthService.instance.currentUser?.id != userId) return;
-        await cache.markSynced(userId);
-        _setLoadedTasks(cachedTasks);
-        return;
-      }
       final remoteTasks = await ApiService.instance.getTasks();
       if (AuthService.instance.currentUser?.id != userId) return;
-      if (remoteTasks.isNotEmpty) {
-        await cache.saveRemoteTasks(userId, remoteTasks);
-        _setLoadedTasks(remoteTasks);
-      } else {
-        final tasks =
-            cachedTasks ??
-            [
+      reconciledTasks = remoteTasks.isEmpty && cachedTasks == null
+          ? [
               Task(
                 id: DateTime.now().millisecondsSinceEpoch.toString(),
                 title: '',
               ),
-            ];
-        _setLoadedTasks(tasks);
-        await cache.saveLocalTasks(userId, tasks);
-        await ApiService.instance.replaceTasks(tasks);
+            ]
+          : cache.mergeTasks(remoteTasks, cachedTasks ?? []);
+      _setLoadedTasks(reconciledTasks);
+      if (cache.sameTasks(remoteTasks, reconciledTasks)) {
+        await cache.saveRemoteTasks(userId, reconciledTasks);
+      } else {
+        await cache.saveLocalTasks(userId, reconciledTasks);
+        await ApiService.instance.replaceTasks(reconciledTasks);
         if (AuthService.instance.currentUser?.id != userId) return;
         await cache.markSynced(userId);
       }
@@ -138,6 +131,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
       if (AuthService.instance.currentUser?.id != userId) return;
       debugPrint('Could not load tasks from API; using local cache: $error');
       final fallback =
+          reconciledTasks ??
           cachedTasks ??
           [
             Task(
