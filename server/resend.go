@@ -45,8 +45,8 @@ func (m resendMailer) sendVerificationCode(ctx context.Context, email, code stri
 	}{
 		From:    m.from,
 		To:      []string{email},
-		Subject: "Motchiy ToDo メールアドレスの確認",
-		Text:    fmt.Sprintf("確認コードは %s です。有効期限は15分です。", code),
+		Subject: "Motchiy ToDo 認証コード",
+		Text:    fmt.Sprintf("認証コードは %s です。有効期限は15分です。", code),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

@@ -24,6 +24,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isRefreshing = false;
   bool _isLoadingBackupSettings = true;
   bool _isCreatingBackup = false;
+  bool _isCheckingServerConnection = false;
+  bool? _serverConnected;
+  String? _serverConnectionError;
+  DateTime? _serverConnectionCheckedAt;
   bool _dailyBackupEnabled = true;
   int _backupRetentionDays = 30;
   DateTime? _latestBackup;
@@ -32,6 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadBackupSettings();
+    _checkServerConnection();
   }
 
   bool get _isMobile =>
@@ -67,6 +72,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (error) {
       debugPrint('Could not load local backup settings: $error');
       if (mounted) setState(() => _isLoadingBackupSettings = false);
+    }
+  }
+
+  Future<void> _checkServerConnection() async {
+    if (_isCheckingServerConnection) return;
+    setState(() => _isCheckingServerConnection = true);
+    try {
+      await ApiService.instance.checkServerConnection();
+      if (!mounted) return;
+      setState(() {
+        _serverConnected = true;
+        _serverConnectionError = null;
+        _serverConnectionCheckedAt = DateTime.now();
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _serverConnected = false;
+        _serverConnectionError = error.toString();
+        _serverConnectionCheckedAt = DateTime.now();
+      });
+    } finally {
+      if (mounted) setState(() => _isCheckingServerConnection = false);
     }
   }
 
@@ -303,6 +331,81 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildServerConnectionSection() {
+    final connected = _serverConnected;
+    final statusText = _isCheckingServerConnection
+        ? '確認中...'
+        : connected == null
+        ? '未確認'
+        : connected
+        ? '接続中'
+        : '接続できません';
+    final statusColor = _isCheckingServerConnection
+        ? Theme.of(context).colorScheme.primary
+        : connected == true
+        ? Colors.green
+        : connected == false
+        ? Theme.of(context).colorScheme.error
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'サーバー接続',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '現在のサーバーへの接続状態を確認できます',
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          margin: EdgeInsets.zero,
+          child: ListTile(
+            leading: _isCheckingServerConnection
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    connected == true
+                        ? Icons.cloud_done
+                        : connected == false
+                        ? Icons.cloud_off
+                        : Icons.cloud_queue,
+                    color: statusColor,
+                  ),
+            title: Text(
+              statusText,
+              style: TextStyle(color: statusColor, fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              _serverConnectionError ??
+                  (_serverConnectionCheckedAt == null
+                      ? '確認していません'
+                      : '最終確認: ${DateFormat('yyyy/MM/dd HH:mm:ss').format(_serverConnectionCheckedAt!.toLocal())}'),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: IconButton(
+              tooltip: '接続状態を確認',
+              onPressed: _isCheckingServerConnection
+                  ? null
+                  : _checkServerConnection,
+              icon: const Icon(Icons.refresh),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildAccountAvatar(AppUser user) {
     return CircleAvatar(
       backgroundImage: user.photoUrl == null
@@ -386,6 +489,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const SizedBox(height: 8),
                   _buildAccountSection(isDark),
+                  const SizedBox(height: 32),
+                  _buildServerConnectionSection(),
                   if (!kIsWeb) ...[
                     const SizedBox(height: 32),
                     _buildBackupSection(isDark),

@@ -1,5 +1,5 @@
 {
-  "apiBaseUrl": "https://todo.motchiy.com/",
+  "apiBaseUrl": "https://api.motchiy.com/todo-app/",
   "platforms": [
     "windows",
     "android",

@@ -39,11 +39,10 @@ paths:
     post:
       tags: [認証]
       operationId: register
-      summary: アカウントを登録してログイン
+      summary: アカウントを登録してメール認証コードを送信
       description: |
-        メールアドレスは小文字に正規化します。パスワードは12文字以上、UTF-8で128バイト
-        以下にしてください。登録後、Resendで6桁の認証コードを送信します。コードの有効期限は15分です。
-        メール認証完了前はログインできません。IPアドレスおよびアカウント単位のレート制限を適用してください。
+        メールアドレスは小文字に正規化します。登録後、Resendで6桁の認証コードを送信します。
+        コードの有効期限は15分です。IPアドレスおよびアカウント単位のレート制限を適用してください。
       requestBody:
         required: true
         content:
@@ -51,12 +50,10 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [email, password, displayName]
+              required: [email, displayName]
               properties:
                 email:
                   $ref: "#/components/schemas/Email"
-                password:
-                  $ref: "#/components/schemas/Password"
                 displayName:
                   $ref: "#/components/schemas/DisplayName"
       responses:
@@ -150,9 +147,11 @@ paths:
     post:
       tags: [認証]
       operationId: login
-      summary: メールアドレスとパスワードでログイン
-      description: メールアドレスとパスワードを検証します。未認証のアカウントには403を返します。
-        IPアドレスおよびアカウント単位のレート制限を適用してください。
+      summary: メールでワンタイムパスワードを送信
+      description: |
+        メールアドレスを受け取り、該当するアカウントがあれば6桁のコードを送信します。
+        アカウント有無を応答から判別できないようにし、IP・メールアドレス単位で送信回数を制限します。
+        コードの有効期限は15分です。
       requestBody:
         required: true
         content:
@@ -160,13 +159,46 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [email, password]
+              required: [email]
               properties:
                 email:
                   $ref: "#/components/schemas/Email"
-                password:
+      responses:
+        "202":
+          description: アカウントが存在する場合、認証コードを送信しました。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /todo-app/auth/login/verify:
+    post:
+      tags: [認証]
+      operationId: verifyLoginCode
+      summary: ワンタイムパスワードを検証してログイン
+      description: |
+        メールアドレスと15分以内の6桁コードを検証します。正しいコードならメール認証を完了し、
+        ログイン応答を返します。コードは一度だけ使用でき、5回を超える誤入力は拒否します。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, code]
+              properties:
+                email:
+                  $ref: "#/components/schemas/Email"
+                code:
                   type: string
-                  maxLength: 128
+                  pattern: "^[0-9]{6}$"
       responses:
         "200":
           $ref: "#/components/responses/TokenResponse"
@@ -174,12 +206,6 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          description: メールアドレスが未認証です。
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Message"
         "429":
           $ref: "#/components/responses/TooManyRequests"
         "500":
@@ -350,11 +376,6 @@ components:
       type: string
       format: email
       maxLength: 254
-    Password:
-      type: string
-      minLength: 12
-      maxLength: 128
-      description: UTF-8で128バイト以下にしてください。
     DisplayName:
       type: string
       minLength: 1

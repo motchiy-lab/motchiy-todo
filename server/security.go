@@ -17,7 +17,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"golang.org/x/crypto/scrypt"
 )
 
 const (
@@ -85,35 +84,6 @@ func clientRateLimitKey(c *gin.Context) string {
 		return host
 	}
 	return c.Request.RemoteAddr
-}
-
-func hashPassword(password string) (string, error) {
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		return "", err
-	}
-	key, err := scrypt.Key([]byte(password), salt, 1<<15, 8, 1, 64)
-	if err != nil {
-		return "", err
-	}
-	return "scrypt$" + hex.EncodeToString(salt) + "$" + hex.EncodeToString(key), nil
-}
-
-func verifyPassword(password, encoded string) bool {
-	parts := strings.Split(encoded, "$")
-	if len(parts) != 3 || parts[0] != "scrypt" {
-		return false
-	}
-	salt, err := hex.DecodeString(parts[1])
-	if err != nil || len(salt) != 16 {
-		return false
-	}
-	expected, err := hex.DecodeString(parts[2])
-	if err != nil || len(expected) != 64 {
-		return false
-	}
-	actual, err := scrypt.Key([]byte(password), salt, 1<<15, 8, 1, len(expected))
-	return err == nil && hmac.Equal(expected, actual)
 }
 
 func newRefreshToken() (string, error) {

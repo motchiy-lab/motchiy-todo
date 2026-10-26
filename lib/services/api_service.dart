@@ -57,6 +57,18 @@ class ApiService {
   Future<dynamic> get(String path) async =>
       _send('GET', path, authorized: true);
 
+  Future<void> checkServerConnection() async {
+    final response = await _send(
+      'GET',
+      '/health',
+      authorized: false,
+      timeout: const Duration(seconds: 5),
+    );
+    if (response is! Map<String, dynamic> || response['status'] != 'ok') {
+      throw const ApiException('サーバーから正常な応答がありません。');
+    }
+  }
+
   Future<dynamic> post(String path, Map<String, dynamic> body) async =>
       _send('POST', path, body: body, authorized: true);
 
@@ -72,6 +84,7 @@ class ApiService {
     Map<String, dynamic>? body,
     required bool authorized,
     bool retryUnauthorized = true,
+    Duration timeout = const Duration(seconds: 30),
   }) async {
     final headers = <String, String>{'Accept': 'application/json'};
     if (body != null) headers['Content-Type'] = 'application/json';
@@ -91,7 +104,7 @@ class ApiService {
               ..headers.addAll(headers)
               ..body = encodedBody ?? '',
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(timeout);
     } on TimeoutException {
       throw const ApiException('APIへの接続がタイムアウトしました。');
     } on http.ClientException catch (error) {
@@ -109,6 +122,7 @@ class ApiService {
           body: body,
           authorized: true,
           retryUnauthorized: false,
+          timeout: timeout,
         );
       }
     }

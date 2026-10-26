@@ -118,19 +118,17 @@ class SignInScreen extends StatefulWidget {
 class _SignInScreenState extends State<SignInScreen> {
   bool _isSigningIn = false;
   bool _isRegistering = false;
-  bool _needsEmailVerification = false;
+  bool _needsEmailCode = false;
   String? _error;
   String? _successMessage;
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
   final _displayNameController = TextEditingController();
   final _verificationCodeController = TextEditingController();
 
   @override
   void dispose() {
     _emailController.dispose();
-    _passwordController.dispose();
     _displayNameController.dispose();
     _verificationCodeController.dispose();
     super.dispose();
@@ -147,49 +145,31 @@ class _SignInScreenState extends State<SignInScreen> {
       if (_isRegistering) {
         await AuthService.instance.register(
           email: _emailController.text.trim(),
-          password: _passwordController.text,
           displayName: _displayNameController.text.trim(),
         );
         if (mounted) {
           setState(() {
-            _needsEmailVerification = true;
+            _needsEmailCode = true;
             _successMessage = '確認コードをメールで送信しました。メールをご確認ください。';
           });
         }
       } else {
-        await AuthService.instance.signIn(
+        await AuthService.instance.requestLoginCode(
           email: _emailController.text.trim(),
-          password: _passwordController.text,
         );
+        if (mounted) {
+          setState(() {
+            _needsEmailCode = true;
+            _successMessage = 'アカウントが登録済みの場合、認証コードをメールで送信しました。';
+          });
+        }
       }
     } catch (error) {
       if (mounted) {
-        if (error is ApiException && error.statusCode == 403) {
-          setState(() {
-            _needsEmailVerification = true;
-            _successMessage = '認証コードを送信しています...';
-          });
-          try {
-            await AuthService.instance.resendVerificationCode(
-              email: _emailController.text.trim(),
-            );
-            if (mounted) {
-              setState(() => _successMessage = '認証コードをメールで送信しました。メールをご確認ください。');
-            }
-          } catch (resendError) {
-            if (mounted) {
-              setState(() {
-                _successMessage = null;
-                _error = resendError.toString();
-              });
-            }
-          }
-        } else {
-          setState(() {
-            _successMessage = null;
-            _error = error.toString();
-          });
-        }
+        setState(() {
+          _successMessage = null;
+          _error = error.toString();
+        });
       }
     } finally {
       if (mounted) setState(() => _isSigningIn = false);
@@ -204,10 +184,17 @@ class _SignInScreenState extends State<SignInScreen> {
       _successMessage = null;
     });
     try {
-      await AuthService.instance.verifyEmail(
-        email: _emailController.text.trim(),
-        code: _verificationCodeController.text.trim(),
-      );
+      if (_isRegistering) {
+        await AuthService.instance.verifyEmail(
+          email: _emailController.text.trim(),
+          code: _verificationCodeController.text.trim(),
+        );
+      } else {
+        await AuthService.instance.verifyLoginCode(
+          email: _emailController.text.trim(),
+          code: _verificationCodeController.text.trim(),
+        );
+      }
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -234,11 +221,21 @@ class _SignInScreenState extends State<SignInScreen> {
       _successMessage = null;
     });
     try {
-      await AuthService.instance.resendVerificationCode(
-        email: _emailController.text.trim(),
-      );
+      if (_isRegistering) {
+        await AuthService.instance.resendVerificationCode(
+          email: _emailController.text.trim(),
+        );
+      } else {
+        await AuthService.instance.requestLoginCode(
+          email: _emailController.text.trim(),
+        );
+      }
       if (mounted) {
-        setState(() => _successMessage = '認証コードを再送信しました。メールをご確認ください。');
+        setState(() {
+          _successMessage = _isRegistering
+              ? '認証コードを再送信しました。メールをご確認ください。'
+              : 'アカウントが登録済みの場合、認証コードを再送信しました。';
+        });
       }
     } catch (error) {
       if (mounted) {
@@ -280,18 +277,18 @@ class _SignInScreenState extends State<SignInScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            _needsEmailVerification
+                            _needsEmailCode
                                 ? 'メールに届いた6桁の認証コードを入力してください。'
                                 : _isRegistering
                                 ? 'アカウントを作成してタスクと設定を同期します。'
-                                : 'メールアドレスでログインしてタスクと設定を同期します。',
+                                : 'メールアドレスに届くワンタイムパスワードでログインします。',
                           ),
                           const SizedBox(height: 28),
                           Form(
                             key: _formKey,
                             child: Column(
                               children: [
-                                if (_needsEmailVerification) ...[
+                                if (_needsEmailCode) ...[
                                   _emailField(),
                                   const SizedBox(height: 12),
                                   TextFormField(
@@ -324,7 +321,11 @@ class _SignInScreenState extends State<SignInScreen> {
                                           : _verifyEmail,
                                       icon: const Icon(Icons.verified_user),
                                       label: Text(
-                                        _isSigningIn ? '確認中...' : 'メールアドレスを認証',
+                                        _isSigningIn
+                                            ? '確認中...'
+                                            : _isRegistering
+                                            ? 'メールアドレスを認証'
+                                            : 'ログイン',
                                       ),
                                     ),
                                   ),
@@ -356,30 +357,6 @@ class _SignInScreenState extends State<SignInScreen> {
                                   ],
                                   _emailField(),
                                   const SizedBox(height: 12),
-                                  TextFormField(
-                                    controller: _passwordController,
-                                    obscureText: true,
-                                    autofillHints: [
-                                      _isRegistering
-                                          ? AutofillHints.newPassword
-                                          : AutofillHints.password,
-                                    ],
-                                    textInputAction: TextInputAction.done,
-                                    onFieldSubmitted: (_) => _submit(),
-                                    decoration: const InputDecoration(
-                                      labelText: 'パスワード',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'パスワードを入力してください。';
-                                      }
-                                      if (_isRegistering && value.length < 12) {
-                                        return '12文字以上で入力してください。';
-                                      }
-                                      return null;
-                                    },
-                                  ),
                                   const SizedBox(height: 20),
                                   SizedBox(
                                     width: double.infinity,
@@ -419,7 +396,7 @@ class _SignInScreenState extends State<SignInScreen> {
                               textAlign: TextAlign.center,
                             ),
                           ],
-                          if (!_needsEmailVerification)
+                          if (!_needsEmailCode)
                             TextButton(
                               onPressed: _isSigningIn
                                   ? null
@@ -434,24 +411,24 @@ class _SignInScreenState extends State<SignInScreen> {
                                     : 'アカウントをお持ちでない方はこちら',
                               ),
                             ),
-                          if (_needsEmailVerification)
+                          if (_needsEmailCode)
                             TextButton(
                               onPressed: _isSigningIn
                                   ? null
                                   : () => setState(() {
-                                      _needsEmailVerification = false;
+                                      _needsEmailCode = false;
                                       _isRegistering = false;
                                       _error = null;
                                       _successMessage = null;
                                     }),
                               child: const Text('ログイン画面に戻る'),
                             ),
-                          if (!_needsEmailVerification && !_isRegistering)
+                          if (!_needsEmailCode && !_isRegistering)
                             TextButton(
                               onPressed: _isSigningIn
                                   ? null
                                   : () => setState(() {
-                                      _needsEmailVerification = true;
+                                      _needsEmailCode = true;
                                       _error = null;
                                       _successMessage = null;
                                     }),

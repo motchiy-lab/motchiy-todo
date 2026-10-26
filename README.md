@@ -191,10 +191,11 @@ OpenAPI 3.1形式の仕様は [`openapi.yaml`](openapi.yaml) にあります。
 
 | Method / path | 要件 |
 | --- | --- |
-| `POST /todo-app/auth/register` | `{ "email", "password", "displayName" }` を受け取り、メールアドレスを正規化して一意性を検証する。パスワードは12文字以上128バイト以下。ソルト付きscrypt等の適切なパスワードハッシュで保存し、Resendで6桁の認証コードを送信する。HTTP 202を返す。 |
+| `POST /todo-app/auth/register` | `{ "email", "displayName" }` を受け取り、メールアドレスを正規化して一意性を検証する。Resendで6桁のメール認証コードを送信する。HTTP 202を返す。 |
 | `POST /todo-app/auth/verification/resend` | `{ "email" }` を受け取り、未認証アカウントがあれば確認コードを再送する。アカウント有無を応答から判別できないようにし、IP・メールアドレス単位で回数を制限する。 |
 | `POST /todo-app/auth/verify-email` | `{ "email", "code" }` を受け取り、15分以内の認証コードを検証する。正しいコードならメール認証を完了し、ログイン応答を返す。 |
-| `POST /todo-app/auth/login` | `{ "email", "password" }` を検証する。未認証のアカウントにはHTTP 403を返し、認証済みならセッションを発行する。 |
+| `POST /todo-app/auth/login` | `{ "email" }` を受け取り、該当アカウントがあれば6桁のワンタイムパスワードをメールで送信する。アカウント有無を応答から判別できないようにし、IP・メールアドレス単位で回数を制限する。HTTP 202を返す。 |
+| `POST /todo-app/auth/login/verify` | `{ "email", "code" }` を検証し、15分以内の正しいコードならメール認証を完了してセッションを発行する。 |
 | `POST /todo-app/auth/refresh` | `{ "refreshToken" }` を検証し、古いトークンを一度だけ使えるよう失効・ローテーションして新しいログイン応答を返す。DBにはトークンそのものではなくハッシュを保存する。 |
 | `POST /todo-app/auth/logout` | 認証中セッションだけを失効させる。 |
 | `GET /todo-app/tasks` | 認証中ユーザーの `{ "tasks": [...] }` を返す。 |

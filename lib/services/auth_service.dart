@@ -48,21 +48,23 @@ class AuthService {
     }
   }
 
-  Future<AppUser> signIn({
+  Future<void> requestLoginCode({required String email}) async {
+    await ApiService.instance.postPublic('/auth/login', {'email': email});
+  }
+
+  Future<AppUser> verifyLoginCode({
     required String email,
-    required String password,
+    required String code,
   }) async {
-    return _authenticate('/auth/login', {'email': email, 'password': password});
+    return _authenticate('/auth/login/verify', {'email': email, 'code': code});
   }
 
   Future<void> register({
     required String email,
-    required String password,
     required String displayName,
   }) async {
     await ApiService.instance.postPublic('/auth/register', {
       'email': email,
-      'password': password,
       'displayName': displayName,
     });
   }

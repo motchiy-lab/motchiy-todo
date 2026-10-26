@@ -29,7 +29,6 @@ type account struct {
 	UserID                    string             `bson:"userId"`
 	Email                     string             `bson:"email"`
 	DisplayName               string             `bson:"displayName"`
-	PasswordHash              string             `bson:"passwordHash"`
 	EmailVerified             bool               `bson:"emailVerified"`
 	VerificationCodeHash      string             `bson:"verificationCodeHash,omitempty"`
 	VerificationCodeExpiresAt *time.Time         `bson:"verificationCodeExpiresAt,omitempty"`
@@ -69,11 +68,6 @@ type publicAccount struct {
 	DisplayName   string `json:"displayName"`
 	PhotoURL      any    `json:"photoUrl"`
 	EmailVerified bool   `json:"emailVerified"`
-}
-
-type authCredentials struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
 }
 
 const verificationLifetime = 15 * time.Minute
@@ -132,6 +126,7 @@ func (a *api) registerRoutes(router *gin.Engine) {
 	group.POST("/auth/verification/resend", a.rateLimit("resend"), a.resendVerification)
 	group.POST("/auth/verify-email", a.rateLimit("verify"), a.verifyEmail)
 	group.POST("/auth/login", a.rateLimit("login"), a.login)
+	group.POST("/auth/login/verify", a.rateLimit("login-verify"), a.verifyLogin)
 	group.POST("/auth/refresh", a.rateLimit("refresh"), a.refresh)
 
 	protected := group.Group("/")
@@ -199,7 +194,6 @@ func (a *api) health(c *gin.Context) {
 func (a *api) register(c *gin.Context) {
 	var request struct {
 		Email       string `json:"email"`
-		Password    string `json:"password"`
 		DisplayName string `json:"displayName"`
 	}
 	if !bindJSON(c, &request) {
@@ -207,8 +201,7 @@ func (a *api) register(c *gin.Context) {
 	}
 	email := normalizeEmail(request.Email)
 	displayName := strings.TrimSpace(request.DisplayName)
-	if email == "" || len([]byte(request.Password)) > 128 || len([]rune(request.Password)) < 12 ||
-		displayName == "" || len([]rune(displayName)) > 80 {
+	if email == "" || displayName == "" || len([]rune(displayName)) > 80 {
 		writeError(c, http.StatusBadRequest, "入力内容が正しくありません。")
 		return
 	}
@@ -221,11 +214,6 @@ func (a *api) register(c *gin.Context) {
 		writeServerError(c, err)
 		return
 	}
-	passwordHash, err := hashPassword(request.Password)
-	if err != nil {
-		writeServerError(c, err)
-		return
-	}
 	code, err := newVerificationCode()
 	if err != nil {
 		writeServerError(c, err)
@@ -233,7 +221,7 @@ func (a *api) register(c *gin.Context) {
 	}
 	expiresAt := time.Now().UTC().Add(verificationLifetime)
 	user := account{
-		UserID: userID, Email: email, DisplayName: displayName, PasswordHash: passwordHash,
+		UserID: userID, Email: email, DisplayName: displayName,
 		EmailVerified: false, VerificationCodeHash: hashVerificationCode(code, a.jwtSecret),
 		VerificationCodeExpiresAt: &expiresAt,
 	}
@@ -362,31 +350,111 @@ func (a *api) verifyEmail(c *gin.Context) {
 }
 
 func (a *api) login(c *gin.Context) {
-	var request authCredentials
+	var request struct {
+		Email string `json:"email"`
+	}
 	if !bindJSON(c, &request) {
 		return
 	}
 	email := normalizeEmail(request.Email)
-	if email == "" || len([]byte(request.Password)) > 128 {
-		writeError(c, http.StatusUnauthorized, "メールアドレスまたはパスワードが正しくありません。")
+	if email == "" {
+		writeError(c, http.StatusBadRequest, "有効なメールアドレスを入力してください。")
 		return
 	}
-	if !a.limiter.allow("login:email:"+email, 10, 15*time.Minute) {
-		writeError(c, http.StatusTooManyRequests, "ログイン試行回数が上限を超えました。")
+	if !a.limiter.allow("login:email:"+email, 5, 15*time.Minute) {
+		writeError(c, http.StatusTooManyRequests, "認証コードの送信回数が上限を超えました。")
+		return
+	}
+	code, err := newVerificationCode()
+	if err != nil {
+		writeServerError(c, err)
+		return
+	}
+	expiresAt := time.Now().UTC().Add(verificationLifetime)
+	result, err := a.db.Collection("users").UpdateOne(c.Request.Context(),
+		bson.M{"email": email},
+		bson.M{"$set": bson.M{
+			"verificationCodeHash":      hashVerificationCode(code, a.jwtSecret),
+			"verificationCodeExpiresAt": expiresAt,
+			"verificationAttempts":      0,
+		}},
+	)
+	if err != nil {
+		writeServerError(c, err)
+		return
+	}
+	if result.MatchedCount == 1 {
+		var user account
+		if err := a.db.Collection("users").FindOne(c.Request.Context(), bson.M{
+			"email": email,
+		}).Decode(&user); err != nil {
+			writeServerError(c, err)
+			return
+		}
+		if err := a.mailer.sendVerificationCode(c.Request.Context(), user.Email, code); err != nil {
+			writeServerError(c, err)
+			return
+		}
+	}
+	c.JSON(http.StatusAccepted, gin.H{"message": "アカウントが存在する場合、認証コードをメールで送信しました。"})
+}
+
+func (a *api) verifyLogin(c *gin.Context) {
+	var request struct {
+		Email string `json:"email"`
+		Code  string `json:"code"`
+	}
+	if !bindJSON(c, &request) {
+		return
+	}
+	email := normalizeEmail(request.Email)
+	if email == "" || !verificationCodePattern.MatchString(request.Code) {
+		writeError(c, http.StatusBadRequest, "メールアドレスまたは認証コードが正しくありません。")
+		return
+	}
+	if !a.limiter.allow("login-verify:email:"+email, 10, 15*time.Minute) {
+		writeError(c, http.StatusTooManyRequests, "認証コードの入力回数が上限を超えました。")
 		return
 	}
 	var user account
-	err := a.db.Collection("users").FindOne(c.Request.Context(), bson.M{"email": email}).Decode(&user)
-	if errors.Is(err, mongo.ErrNoDocuments) || (err == nil && !verifyPassword(request.Password, user.PasswordHash)) {
-		writeError(c, http.StatusUnauthorized, "メールアドレスまたはパスワードが正しくありません。")
+	now := time.Now().UTC()
+	err := a.db.Collection("users").FindOneAndUpdate(
+		c.Request.Context(),
+		bson.M{
+			"email":                     email,
+			"verificationCodeExpiresAt": bson.M{"$gt": now},
+			"verificationAttempts":      bson.M{"$lt": 5},
+		},
+		bson.M{"$inc": bson.M{"verificationAttempts": 1}},
+		options.FindOneAndUpdate().SetReturnDocument(options.Before),
+	).Decode(&user)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		writeError(c, http.StatusUnauthorized, "認証コードが無効か、有効期限が切れています。")
 		return
 	}
 	if err != nil {
 		writeServerError(c, err)
 		return
 	}
-	if !user.EmailVerified {
-		writeError(c, http.StatusForbidden, "メールアドレスの認証が完了していません。確認コードを入力してください。")
+	if !verificationCodeMatches(request.Code, user.VerificationCodeHash, a.jwtSecret) {
+		writeError(c, http.StatusUnauthorized, "認証コードが無効か、有効期限が切れています。")
+		return
+	}
+	result, err := a.db.Collection("users").UpdateOne(c.Request.Context(), bson.M{
+		"_id":                       user.ID,
+		"verificationCodeHash":      user.VerificationCodeHash,
+		"verificationCodeExpiresAt": bson.M{"$gt": time.Now().UTC()},
+		"verificationAttempts":      bson.M{"$lte": 5},
+	}, bson.M{
+		"$set":   bson.M{"emailVerified": true, "verificationCodeHash": "", "verificationAttempts": 0},
+		"$unset": bson.M{"verificationCodeExpiresAt": ""},
+	})
+	if err != nil {
+		writeServerError(c, err)
+		return
+	}
+	if result.ModifiedCount != 1 {
+		writeError(c, http.StatusUnauthorized, "認証コードが無効か、有効期限が切れています。")
 		return
 	}
 	a.createSessionResponse(c, user)
