@@ -1,0 +1,7 @@
+{
+  "apiBaseUrl": "https://api.motchiy.com/todo-app/",
+  "platforms": [
+    "windows",
+    "android"
+  ]
+}
