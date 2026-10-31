@@ -38,14 +38,19 @@ void main() {
     expect(await cache.hasPendingSync('user-1'), isFalse);
   });
 
-  test('merges different task sets without dropping conflicting versions', () {
+  test('merges tasks by ID without duplicating conflicting versions', () {
     final cache = TaskCacheService.instance;
     final remote = [
-      Task(id: 'shared', title: 'Server version'),
+      Task(id: 'shared', title: 'Server version', isCompleted: false),
       Task(id: 'remote-only', title: 'Server only'),
     ];
     final local = [
-      Task(id: 'shared', title: 'Local version'),
+      Task(
+        id: 'shared',
+        title: 'Local version',
+        isCompleted: true,
+        completedAt: DateTime(2026, 11, 1),
+      ),
       Task(id: 'local-only', title: 'Local only'),
     ];
 
@@ -54,10 +59,17 @@ void main() {
     expect(merged.map((task) => task.title), [
       'Server version',
       'Server only',
-      'Local version',
       'Local only',
     ]);
-    expect(merged[2].id, 'shared_preserved');
-    expect(cache.sameTasks(merged, cache.mergeTasks(merged, local)), isTrue);
+    expect(merged.map((task) => task.id).toSet().length, merged.length);
+    expect(merged.first.isCompleted, isFalse);
+    final pendingSyncMerge = cache.mergeTasks(
+      remote,
+      local,
+      preferLocalConflicts: true,
+    );
+    expect(pendingSyncMerge.first.title, 'Local version');
+    expect(pendingSyncMerge.first.isCompleted, isTrue);
+    expect(pendingSyncMerge.first.completedAt, DateTime(2026, 11, 1));
   });
 }

@@ -77,37 +77,26 @@ class TaskCacheService {
     }
   }
 
-  List<Task> mergeTasks(List<Task> preferred, List<Task> preserved) {
-    final merged = List<Task>.of(preferred);
-    final tasksById = <String, Task>{for (final task in merged) task.id: task};
-    for (final task in preserved) {
-      final existing = tasksById[task.id];
-      if (existing == null) {
+  List<Task> mergeTasks(
+    List<Task> remote,
+    List<Task> local, {
+    bool preferLocalConflicts = false,
+  }) {
+    final merged = List<Task>.of(remote);
+    final taskIndexById = <String, int>{
+      for (var index = 0; index < merged.length; index++)
+        merged[index].id: index,
+    };
+    for (final task in local) {
+      final existingIndex = taskIndexById[task.id];
+      if (existingIndex == null) {
+        taskIndexById[task.id] = merged.length;
         merged.add(task);
-        tasksById[task.id] = task;
-        continue;
+      } else if (preferLocalConflicts &&
+          jsonEncode(merged[existingIndex].toJson()) !=
+              jsonEncode(task.toJson())) {
+        merged[existingIndex] = task;
       }
-      if (jsonEncode(existing.toJson()) == jsonEncode(task.toJson())) continue;
-
-      final baseId = '${task.id}_preserved';
-      var preservedId = baseId;
-      var suffix = 2;
-      while (tasksById.containsKey(preservedId)) {
-        final candidate = tasksById[preservedId]!;
-        if (jsonEncode(candidate.toJson()) ==
-            jsonEncode({...task.toJson(), 'id': preservedId})) {
-          preservedId = '';
-          break;
-        }
-        preservedId = '${baseId}_${suffix++}';
-      }
-      if (preservedId.isEmpty) continue;
-      final preservedTask = Task.fromJson({
-        ...task.toJson(),
-        'id': preservedId,
-      });
-      merged.add(preservedTask);
-      tasksById[preservedId] = preservedTask;
     }
     return merged;
   }

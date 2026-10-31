@@ -67,7 +67,12 @@ class CalendarScreenState extends State<CalendarScreen> {
     try {
       final remoteTasks = await ApiService.instance.getTasks();
       if (AuthService.instance.currentUser?.id != userId) return;
-      reconciledTasks = cache.mergeTasks(remoteTasks, cachedTasks ?? []);
+      final hasPendingSync = await cache.hasPendingSync(userId);
+      reconciledTasks = cache.mergeTasks(
+        remoteTasks,
+        cachedTasks ?? [],
+        preferLocalConflicts: hasPendingSync,
+      );
       loadedTasks = reconciledTasks;
       if (cache.sameTasks(remoteTasks, reconciledTasks)) {
         await cache.saveRemoteTasks(userId, reconciledTasks);
@@ -422,8 +427,8 @@ class CalendarScreenState extends State<CalendarScreen> {
                             children: [
                               Text(
                                 '${_currentMonth.year}年 ${_currentMonth.month}月',
-                                style: const TextStyle(
-                                  fontSize: 20,
+                                style: TextStyle(
+                                  fontSize: _isMobile ? 18 : 20,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -436,9 +441,12 @@ class CalendarScreenState extends State<CalendarScreen> {
                                         horizontal: 12,
                                         vertical: 8,
                                       ),
-                                      minimumSize: Size.zero,
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
+                                      minimumSize: _isMobile
+                                          ? const Size(48, 48)
+                                          : Size.zero,
+                                      tapTargetSize: _isMobile
+                                          ? MaterialTapTargetSize.padded
+                                          : MaterialTapTargetSize.shrinkWrap,
                                     ),
                                     child: const Text(
                                       '今日',
@@ -477,7 +485,9 @@ class CalendarScreenState extends State<CalendarScreen> {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      '💡 ヒント: カレンダー上でドラッグして1日または複数日の予定を追加し、日付をクリックしてその日の予定一覧を表示できます',
+                                      _isMobile
+                                          ? '💡 日付を選び、下のボタンから予定を追加できます。日付をタップするとその日の予定を表示します。'
+                                          : '💡 カレンダー上でドラッグして1日または複数日の予定を追加し、日付をクリックしてその日の予定一覧を表示できます',
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: isDark
@@ -542,55 +552,63 @@ class CalendarScreenState extends State<CalendarScreen> {
                                   const Divider(height: 16),
                                   GestureDetector(
                                     key: _gridKey,
-                                    onPanStart: (details) {
-                                      final date = _getDateFromLocalPosition(
-                                        details.localPosition,
-                                        gridDays,
-                                      );
-                                      if (date != null) {
-                                        setState(() {
-                                          _isDragging = true;
-                                          _dragStartDate = date;
-                                          _dragEndDate = date;
-                                        });
-                                      }
-                                    },
-                                    onPanUpdate: (details) {
-                                      if (_isDragging) {
-                                        final date = _getDateFromLocalPosition(
-                                          details.localPosition,
-                                          gridDays,
-                                        );
-                                        if (date != null &&
-                                            date != _dragEndDate) {
-                                          setState(() {
-                                            _dragEndDate = date;
-                                          });
-                                        }
-                                      }
-                                    },
-                                    onPanEnd: (details) {
-                                      if (_isDragging &&
-                                          _dragStartDate != null &&
-                                          _dragEndDate != null) {
-                                        final start = _dragStartDate!;
-                                        final end = _dragEndDate!;
+                                    onPanStart: _isMobile
+                                        ? null
+                                        : (details) {
+                                            final date =
+                                                _getDateFromLocalPosition(
+                                                  details.localPosition,
+                                                  gridDays,
+                                                );
+                                            if (date != null) {
+                                              setState(() {
+                                                _isDragging = true;
+                                                _dragStartDate = date;
+                                                _dragEndDate = date;
+                                              });
+                                            }
+                                          },
+                                    onPanUpdate: _isMobile
+                                        ? null
+                                        : (details) {
+                                            if (_isDragging) {
+                                              final date =
+                                                  _getDateFromLocalPosition(
+                                                    details.localPosition,
+                                                    gridDays,
+                                                  );
+                                              if (date != null &&
+                                                  date != _dragEndDate) {
+                                                setState(() {
+                                                  _dragEndDate = date;
+                                                });
+                                              }
+                                            }
+                                          },
+                                    onPanEnd: _isMobile
+                                        ? null
+                                        : (details) {
+                                            if (_isDragging &&
+                                                _dragStartDate != null &&
+                                                _dragEndDate != null) {
+                                              final start = _dragStartDate!;
+                                              final end = _dragEndDate!;
 
-                                        setState(() {
-                                          _isDragging = false;
-                                          _dragStartDate = null;
-                                          _dragEndDate = null;
-                                        });
+                                              setState(() {
+                                                _isDragging = false;
+                                                _dragStartDate = null;
+                                                _dragEndDate = null;
+                                              });
 
-                                        _createTaskForRange(start, end);
-                                      } else {
-                                        setState(() {
-                                          _isDragging = false;
-                                          _dragStartDate = null;
-                                          _dragEndDate = null;
-                                        });
-                                      }
-                                    },
+                                              _createTaskForRange(start, end);
+                                            } else {
+                                              setState(() {
+                                                _isDragging = false;
+                                                _dragStartDate = null;
+                                                _dragEndDate = null;
+                                              });
+                                            }
+                                          },
                                     child: Container(
                                       decoration: BoxDecoration(
                                         border: Border.all(
@@ -606,9 +624,11 @@ class CalendarScreenState extends State<CalendarScreen> {
                                         physics:
                                             const NeverScrollableScrollPhysics(),
                                         gridDelegate:
-                                            const SliverGridDelegateWithFixedCrossAxisCount(
+                                            SliverGridDelegateWithFixedCrossAxisCount(
                                               crossAxisCount: 7,
-                                              childAspectRatio: 1.15,
+                                              childAspectRatio: _isMobile
+                                                  ? 0.8
+                                                  : 1.15,
                                             ),
                                         itemCount: gridDays.length,
                                         itemBuilder: (context, index) {
@@ -724,20 +744,24 @@ class CalendarScreenState extends State<CalendarScreen> {
                                                   ),
                                                 ),
                                               ),
-                                              padding: const EdgeInsets.only(
-                                                top: 2,
-                                                bottom: 2,
+                                              padding: EdgeInsets.symmetric(
+                                                vertical: _isMobile ? 4 : 2,
                                               ),
                                               child: Column(
                                                 crossAxisAlignment:
                                                     CrossAxisAlignment.stretch,
                                                 children: [
                                                   Align(
-                                                    alignment:
-                                                        Alignment.topRight,
+                                                    alignment: _isMobile
+                                                        ? Alignment.topCenter
+                                                        : Alignment.topRight,
                                                     child: Container(
-                                                      width: 22,
-                                                      height: 22,
+                                                      width: _isMobile
+                                                          ? 32
+                                                          : 22,
+                                                      height: _isMobile
+                                                          ? 32
+                                                          : 22,
                                                       decoration: BoxDecoration(
                                                         color: isSelected
                                                             ? colorScheme
@@ -770,7 +794,9 @@ class CalendarScreenState extends State<CalendarScreen> {
                                                       child: Text(
                                                         '${date.day}',
                                                         style: TextStyle(
-                                                          fontSize: 11,
+                                                          fontSize: _isMobile
+                                                              ? 16
+                                                              : 11,
                                                           fontWeight:
                                                               isToday ||
                                                                   isSelected ||
@@ -797,146 +823,202 @@ class CalendarScreenState extends State<CalendarScreen> {
                                                   ),
                                                   const SizedBox(height: 2),
                                                   Expanded(
-                                                    child: ListView(
-                                                      physics:
-                                                          const NeverScrollableScrollPhysics(),
-                                                      padding: EdgeInsets.zero,
-                                                      children: List.generate(laneCount, (
-                                                        lane,
-                                                      ) {
-                                                        final task = dayTasks
-                                                            .where(
-                                                              (task) =>
-                                                                  taskLanes[task
-                                                                      .id] ==
-                                                                  lane,
-                                                            )
-                                                            .firstOrNull;
-                                                        if (task == null) {
-                                                          return const SizedBox(
-                                                            height: 20,
-                                                          );
-                                                        }
-                                                        final start =
-                                                            task.startDate ??
-                                                            task.dueDate ??
-                                                            date;
-                                                        final end =
-                                                            task.dueDate ??
-                                                            task.startDate ??
-                                                            date;
-
-                                                        final dNorm = DateTime(
-                                                          date.year,
-                                                          date.month,
-                                                          date.day,
-                                                        );
-                                                        final sNorm = DateTime(
-                                                          start.year,
-                                                          start.month,
-                                                          start.day,
-                                                        );
-                                                        final eNorm = DateTime(
-                                                          end.year,
-                                                          end.month,
-                                                          end.day,
-                                                        );
-
-                                                        final bool isStart =
-                                                            dNorm.atSameDayAs(
-                                                              sNorm,
-                                                            );
-                                                        final bool isEnd = dNorm
-                                                            .atSameDayAs(eNorm);
-                                                        final bool isWeekStart =
-                                                            date.weekday % 7 ==
-                                                            0;
-                                                        final bool isWeekEnd =
-                                                            date.weekday % 7 ==
-                                                            6;
-                                                        final bool
-                                                        shouldRoundLeft =
-                                                            isStart ||
-                                                            isWeekStart;
-                                                        final bool
-                                                        shouldRoundRight =
-                                                            isEnd || isWeekEnd;
-
-                                                        final borderRadius =
-                                                            BorderRadius.horizontal(
-                                                              left:
-                                                                  shouldRoundLeft
-                                                                  ? const Radius.circular(
-                                                                      4,
-                                                                    )
-                                                                  : Radius.zero,
-                                                              right:
-                                                                  shouldRoundRight
-                                                                  ? const Radius.circular(
-                                                                      4,
-                                                                    )
-                                                                  : Radius.zero,
-                                                            );
-
-                                                        return Container(
-                                                          height: 18,
-                                                          margin:
-                                                              const EdgeInsets.only(
-                                                                bottom: 2,
-                                                              ),
-                                                          padding: EdgeInsets.only(
-                                                            left:
-                                                                (isWeekStart ||
-                                                                    isStart)
-                                                                ? 4
-                                                                : 2,
-                                                            right:
-                                                                (isWeekEnd ||
-                                                                    isEnd)
-                                                                ? 4
-                                                                : 2,
-                                                          ),
-                                                          decoration: BoxDecoration(
-                                                            color:
-                                                                task.isCompleted
-                                                                ? Colors.grey
-                                                                      .withValues(
-                                                                        alpha:
-                                                                            0.3,
-                                                                      )
-                                                                : colorScheme
-                                                                      .primary
-                                                                      .withValues(
-                                                                        alpha:
-                                                                            0.85,
-                                                                      ),
-                                                            borderRadius:
-                                                                borderRadius,
-                                                          ),
-                                                          alignment: Alignment
-                                                              .centerLeft,
-                                                          child: Text(
-                                                            task.title.isEmpty
-                                                                ? '無題'
-                                                                : task.title,
-                                                            style: TextStyle(
-                                                              fontSize: 10,
-                                                              color: colorScheme
-                                                                  .onPrimary,
-                                                              decoration:
-                                                                  task.isCompleted
-                                                                  ? TextDecoration
-                                                                        .lineThrough
-                                                                  : null,
+                                                    child: _isMobile
+                                                        ? Center(
+                                                            child: Wrap(
+                                                              alignment:
+                                                                  WrapAlignment
+                                                                      .center,
+                                                              spacing: 2,
+                                                              children: [
+                                                                for (final task
+                                                                    in dayTasks
+                                                                        .take(
+                                                                          3,
+                                                                        ))
+                                                                  Container(
+                                                                    width: 6,
+                                                                    height: 6,
+                                                                    decoration: BoxDecoration(
+                                                                      color:
+                                                                          task.isCompleted
+                                                                          ? Colors.grey
+                                                                          : colorScheme.primary,
+                                                                      shape: BoxShape
+                                                                          .circle,
+                                                                    ),
+                                                                  ),
+                                                                if (dayTasks
+                                                                        .length >
+                                                                    3)
+                                                                  Text(
+                                                                    '+${dayTasks.length - 3}',
+                                                                    style: TextStyle(
+                                                                      fontSize:
+                                                                          9,
+                                                                      color: colorScheme
+                                                                          .onSurfaceVariant,
+                                                                    ),
+                                                                  ),
+                                                              ],
                                                             ),
-                                                            maxLines: 1,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
+                                                          )
+                                                        : ListView(
+                                                            physics:
+                                                                const NeverScrollableScrollPhysics(),
+                                                            padding:
+                                                                EdgeInsets.zero,
+                                                            children: List.generate(laneCount, (
+                                                              lane,
+                                                            ) {
+                                                              final task = dayTasks
+                                                                  .where(
+                                                                    (task) =>
+                                                                        taskLanes[task
+                                                                            .id] ==
+                                                                        lane,
+                                                                  )
+                                                                  .firstOrNull;
+                                                              if (task ==
+                                                                  null) {
+                                                                return const SizedBox(
+                                                                  height: 20,
+                                                                );
+                                                              }
+                                                              final start =
+                                                                  task.startDate ??
+                                                                  task.dueDate ??
+                                                                  date;
+                                                              final end =
+                                                                  task.dueDate ??
+                                                                  task.startDate ??
+                                                                  date;
+
+                                                              final dNorm =
+                                                                  DateTime(
+                                                                    date.year,
+                                                                    date.month,
+                                                                    date.day,
+                                                                  );
+                                                              final sNorm =
+                                                                  DateTime(
+                                                                    start.year,
+                                                                    start.month,
+                                                                    start.day,
+                                                                  );
+                                                              final eNorm =
+                                                                  DateTime(
+                                                                    end.year,
+                                                                    end.month,
+                                                                    end.day,
+                                                                  );
+
+                                                              final bool
+                                                              isStart = dNorm
+                                                                  .atSameDayAs(
+                                                                    sNorm,
+                                                                  );
+                                                              final bool
+                                                              isEnd = dNorm
+                                                                  .atSameDayAs(
+                                                                    eNorm,
+                                                                  );
+                                                              final bool
+                                                              isWeekStart =
+                                                                  date.weekday %
+                                                                      7 ==
+                                                                  0;
+                                                              final bool
+                                                              isWeekEnd =
+                                                                  date.weekday %
+                                                                      7 ==
+                                                                  6;
+                                                              final bool
+                                                              shouldRoundLeft =
+                                                                  isStart ||
+                                                                  isWeekStart;
+                                                              final bool
+                                                              shouldRoundRight =
+                                                                  isEnd ||
+                                                                  isWeekEnd;
+
+                                                              final borderRadius = BorderRadius.horizontal(
+                                                                left:
+                                                                    shouldRoundLeft
+                                                                    ? const Radius.circular(
+                                                                        4,
+                                                                      )
+                                                                    : Radius
+                                                                          .zero,
+                                                                right:
+                                                                    shouldRoundRight
+                                                                    ? const Radius.circular(
+                                                                        4,
+                                                                      )
+                                                                    : Radius
+                                                                          .zero,
+                                                              );
+
+                                                              return Container(
+                                                                height: 18,
+                                                                margin:
+                                                                    const EdgeInsets.only(
+                                                                      bottom: 2,
+                                                                    ),
+                                                                padding: EdgeInsets.only(
+                                                                  left:
+                                                                      (isWeekStart ||
+                                                                          isStart)
+                                                                      ? 4
+                                                                      : 2,
+                                                                  right:
+                                                                      (isWeekEnd ||
+                                                                          isEnd)
+                                                                      ? 4
+                                                                      : 2,
+                                                                ),
+                                                                decoration: BoxDecoration(
+                                                                  color:
+                                                                      task.isCompleted
+                                                                      ? Colors.grey.withValues(
+                                                                          alpha:
+                                                                              0.3,
+                                                                        )
+                                                                      : colorScheme
+                                                                            .primary
+                                                                            .withValues(
+                                                                              alpha: 0.85,
+                                                                            ),
+                                                                  borderRadius:
+                                                                      borderRadius,
+                                                                ),
+                                                                alignment: Alignment
+                                                                    .centerLeft,
+                                                                child: Text(
+                                                                  task
+                                                                          .title
+                                                                          .isEmpty
+                                                                      ? '無題'
+                                                                      : task.title,
+                                                                  style: TextStyle(
+                                                                    fontSize:
+                                                                        10,
+                                                                    color: colorScheme
+                                                                        .onPrimary,
+                                                                    decoration:
+                                                                        task.isCompleted
+                                                                        ? TextDecoration
+                                                                              .lineThrough
+                                                                        : null,
+                                                                  ),
+                                                                  maxLines: 1,
+                                                                  overflow:
+                                                                      TextOverflow
+                                                                          .ellipsis,
+                                                                ),
+                                                              );
+                                                            }),
                                                           ),
-                                                        );
-                                                      }),
-                                                    ),
                                                   ),
                                                 ],
                                               ),
@@ -950,6 +1032,23 @@ class CalendarScreenState extends State<CalendarScreen> {
                               ),
                             ),
                           ),
+                          if (_isMobile) ...[
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                onPressed: () => _createTaskForRange(
+                                  _selectedDate,
+                                  _selectedDate,
+                                ),
+                                icon: const Icon(Icons.add),
+                                label: const Text('選択日にタスクを追加'),
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(48),
+                                ),
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 24),
                           if (selectedDateTasks.isEmpty)
                             Container(

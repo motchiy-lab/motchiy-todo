@@ -110,6 +110,7 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
     try {
       final remoteTasks = await ApiService.instance.getTasks();
       if (AuthService.instance.currentUser?.id != userId) return;
+      final hasPendingSync = await cache.hasPendingSync(userId);
       reconciledTasks = remoteTasks.isEmpty && cachedTasks == null
           ? [
               Task(
@@ -117,7 +118,11 @@ class TaskHomeScreenState extends State<TaskHomeScreen> {
                 title: '',
               ),
             ]
-          : cache.mergeTasks(remoteTasks, cachedTasks ?? []);
+          : cache.mergeTasks(
+              remoteTasks,
+              cachedTasks ?? [],
+              preferLocalConflicts: hasPendingSync,
+            );
       _setLoadedTasks(reconciledTasks);
       if (cache.sameTasks(remoteTasks, reconciledTasks)) {
         await cache.saveRemoteTasks(userId, reconciledTasks);
