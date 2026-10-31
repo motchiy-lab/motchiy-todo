@@ -1,4 +1,4 @@
 const String apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://localhost:11001',
+  defaultValue: 'https://api.motchiy.com',
 );

@@ -132,6 +132,7 @@ APIは `http://localhost:11001/todo-app/health` でヘルスチェックでき�
 ローカルの `http://localhost:11001` に接続してください。公開側のパスにも `/todo-app/` が必要です。
 
 ローカルサーバーへFlutterアプリから接続して試す場合:
+通常の起動では公開APIへ接続します。ローカルAPIを使う場合は、次のように接続先を指定してください。
 
 ```powershell
 flutter run --dart-define=API_BASE_URL=http://localhost:11001
@@ -282,6 +283,10 @@ Android、Linux向け成果物を作る例:
 ```powershell
 .\tool\build.ps1
 ```
+
+このスクリプトはRelease版をビルドします。起動中のDebug版は更新されないため、
+Debug版で変更を確認する場合はアプリを終了してから `flutter run` で再起動してください。
+Release版を確認する場合は、生成されたMSIXをインストールして起動してください。
 
 `tool/build.json` の `apiBaseUrl` に実際のHTTPS API URLを書き込んでください。
 コマンドライン引数 `-ApiBaseUrl` を指定した場合は、ファイルの設定より優先されます。
