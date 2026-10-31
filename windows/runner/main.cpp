@@ -1,6 +1,8 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.ApplicationModel.h>
 
 #include "flutter_window.h"
 #include "utils.h"
@@ -12,6 +14,7 @@ constexpr wchar_t kSingleInstanceMutexName[] =
 constexpr wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 constexpr wchar_t kWindowTitle[] = L"Motchiy ToDo";
 constexpr UINT kActivateExistingInstanceMessage = WM_APP + 1;
+constexpr UINT kPackageUpdatingMessage = WM_APP + 2;
 
 }  // namespace
 
@@ -68,12 +71,32 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
   window.SetQuitOnClose(true);
 
+  winrt::Windows::ApplicationModel::PackageCatalog package_catalog{nullptr};
+  winrt::event_token package_update_token{};
+  bool package_update_monitor_registered = false;
+  try {
+    package_catalog =
+        winrt::Windows::ApplicationModel::PackageCatalog::OpenForCurrentPackage();
+    package_update_token = package_catalog.PackageUpdating(
+        [&window](auto const&, auto const& args) {
+          if (!args.IsComplete()) {
+            ::PostMessage(window.GetHandle(), kPackageUpdatingMessage, 0, 0);
+          }
+        });
+    package_update_monitor_registered = true;
+  } catch (winrt::hresult_error const&) {
+    // Unpackaged development builds do not have a package catalog.
+  }
+
   ::MSG msg;
   while (::GetMessage(&msg, nullptr, 0, 0)) {
     ::TranslateMessage(&msg);
     ::DispatchMessage(&msg);
   }
 
+  if (package_update_monitor_registered) {
+    package_catalog.PackageUpdating(package_update_token);
+  }
   ::ReleaseMutex(single_instance_mutex);
   ::CloseHandle(single_instance_mutex);
   ::CoUninitialize();

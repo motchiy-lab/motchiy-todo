@@ -42,6 +42,15 @@ MSIXはWindows 10/11向けです。`tool\build.ps1` は初回ビルド時に開�
 `-CertificateThumbprint <拇印>` で既存の秘密鍵付き証明書を指定できます。
 署名を省略する場合だけ `-SkipMsixSigning` を指定します。
 
+この更新通知に対応したバージョンでは、MSIXをクリックして更新すると、アプリはWindowsから
+更新開始の通知を受け取り、トレイに格納されている場合も含めて自動的に終了します。
+この対応より前のバージョンから最初に更新する場合は、旧版に終了通知機能がないため、
+アプリを手動で終了するか、次のコマンドで更新してください。
+
+```powershell
+.\tool\install.ps1 -PackagePath ".\dist\motchiy-todo-windows-<version>.msix"
+```
+
 ### Android
 
 端末の設定で、利用するファイルマネージャーまたはブラウザに「不明なアプリの
