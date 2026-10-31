@@ -3,8 +3,6 @@ param(
     [ValidateSet('debug', 'profile', 'release')]
     [string]$Configuration = 'release',
 
-    [string]$OutputDirectory = 'dist',
-
     [string]$Version,
 
     [string]$ApiBaseUrl,
@@ -264,11 +262,7 @@ function Invoke-FlutterPubGet {
 
 $root = Split-Path -Parent $PSScriptRoot
 $platformsConfigPath = Join-Path $PSScriptRoot 'build.json'
-$outputPath = [IO.Path]::GetFullPath((Join-Path $root $OutputDirectory))
-$rootPrefix = [IO.Path]::GetFullPath($root) + [IO.Path]::DirectorySeparatorChar
-if (-not $outputPath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'OutputDirectory must be a directory inside the repository.'
-}
+$outputPath = Join-Path $root 'dist'
 $buildVersion = Get-Version $Version
 
 if (-not (Test-Path $platformsConfigPath)) {

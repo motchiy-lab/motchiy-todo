@@ -300,8 +300,8 @@ Release版を確認する場合は、生成されたMSIXをインストールし
 `tool/build.json` の `apiBaseUrl` に実際のHTTPS API URLを書き込んでください。
 コマンドライン引数 `-ApiBaseUrl` を指定した場合は、ファイルの設定より優先されます。
 
-既定ではMSIX、APK、Linux tar.gzを `dist/` に作成します。`tool/build.json` の
-`platforms` 配列で対象を選びます。Windows MSIXは開発用自己署名証明書で署名され、
+MSIX、APK、Linux tar.gzなどの成果物は常にリポジトリ直下の `dist/` に作成します。
+`tool/build.json` の `platforms` 配列で対象を選びます。Windows MSIXは開発用自己署名証明書で署名され、
 `motchiy-todo-publisher.cer` が出力されます。受け取る側はインストール前に発行者証明書を
 信頼する必要があります。広く配布する場合は、Windows署名証明書を用意してください。
 Android APKは現在のGradle設定により開発用署名で作成されます。直接配布・試用はできますが、
