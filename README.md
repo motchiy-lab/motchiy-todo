@@ -33,13 +33,10 @@ Web版以外では、設定画面からタスクとテーマ設定のローカ�
 
 ### Windows
 
-MSIXはWindows 10/11向けです。`tool\build.ps1` は初回ビルド時に開発用の
-自己署名証明書を現在のユーザーの証明書ストアへ作成し、MSIXへ署名します。
-成果物には公開証明書 `motchiy-todo-publisher.cer` も出力されるため、インストール
-する各Windows端末でこのファイルを「現在のユーザー > 信頼されたルート証明機関」に
-インポートしてからMSIXをインストールしてください。証明書を更新する場合は、
-`-CertificateThumbprint <拇印>` で既存の秘密鍵付き証明書を指定できます。
-署名を省略する場合だけ `-SkipMsixSigning` を指定します。
+MSIXはWindows 10/11向けです。Windows版はMicrosoft Storeで配布するため、
+`tool\build.ps1` は署名なしのMSIXを作成します。証明書の発行やローカル署名は
+不要で、Microsoft Storeへの提出後にStore側で署名されます。作成したMSIXは
+Storeへの提出用であり、Storeで公開されるまでは通常の方法ではインストールできません。
 
 端末の設定で、利用するファイルマネージャーまたはブラウザに「不明なアプリの
 インストール」を許可してからAPKをインストールしてください。Google Play経由の
@@ -283,15 +280,15 @@ Android、Linux向け成果物を作る例:
 
 このスクリプトはRelease版をビルドします。起動中のDebug版は更新されないため、
 Debug版で変更を確認する場合はアプリを終了してから `flutter run` で再起動してください。
-Release版を確認する場合は、生成されたMSIXをインストールして起動してください。
+Windows版はMicrosoft Store提出用の署名なしMSIXとして出力されます。公開後は
+Microsoft Storeからインストールして確認してください。
 
 `tool/build.json` の `apiBaseUrl` に実際のHTTPS API URLを書き込んでください。
 コマンドライン引数 `-ApiBaseUrl` を指定した場合は、ファイルの設定より優先されます。
 
 MSIX、APK、Linux tar.gzなどの成果物は常にリポジトリ直下の `dist/` に作成します。
-`tool/build.json` の `platforms` 配列で対象を選びます。Windows MSIXは開発用自己署名証明書で署名され、
-`motchiy-todo-publisher.cer` が出力されます。受け取る側はインストール前に発行者証明書を
-信頼する必要があります。広く配布する場合は、Windows署名証明書を用意してください。
+`tool/build.json` の `platforms` 配列で対象を選びます。Windows MSIXはMicrosoft Store提出用に
+署名なしで作成され、公開時にStore側で署名されます。
 Android APKは現在のGradle設定により開発用署名で作成されます。直接配布・試用はできますが、
 Google Playや継続的な本番アップデートには専用のリリース署名鍵と本番用アプリIDを設定して
 ください。署名鍵は安全にバックアップし、リポジトリや配布物に含めないでください。
