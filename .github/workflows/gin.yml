@@ -37,7 +37,7 @@ jobs:
   deploy:
     needs: test
     if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux]
+    runs-on: [self-hosted, gin]
     concurrency:
       group: motchiy-todo-server-deploy
       cancel-in-progress: false
