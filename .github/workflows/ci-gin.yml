@@ -2,9 +2,15 @@ name: CI - Gin
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
+    paths:
+      - 'server/**'
+      - '.github/workflows/**'
   pull_request:
-    branches: ["main"]
+    branches: [ "main" ]
+    paths:
+      - 'server/**'
+      - '.github/workflows/**'
 
 jobs:
   test:
