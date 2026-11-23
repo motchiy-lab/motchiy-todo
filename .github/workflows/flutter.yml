@@ -1,4 +1,4 @@
-name: CI - Flutter
+name: Flutter
 
 on:
   push:

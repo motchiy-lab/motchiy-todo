@@ -57,3 +57,4 @@ app.*.map.json
 dist/
 server/server.exe
 server/server
+server/motchiy-todo-server
