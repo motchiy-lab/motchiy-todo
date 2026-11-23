@@ -34,18 +34,12 @@ jobs:
       - name: Run tests
         run: go test ./...
 
-  deploy:
+  build:
     needs: test
-    if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, gin]
-    concurrency:
-      group: motchiy-todo-server-deploy
-      cancel-in-progress: false
+    runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
-        with:
-          clean: false
-          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -55,9 +49,98 @@ jobs:
 
       - name: Build server
         working-directory: server
-        run: go build -o motchiy-todo-server .
+        run: go build -o "$RUNNER_TEMP/motchiy-todo-server" .
 
-      - name: Restart server
+  deploy:
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, gin]
+    env:
+      DEPLOY_BRANCH: ${{ github.ref_name }}
+      DEPLOY_SHA: ${{ github.sha }}
+      SERVICE_NAME: motchiy-todo-server.service
+
+    concurrency:
+      group: motchiy-todo-server-deploy
+      cancel-in-progress: false
+
+    steps:
+      - name: Validate deployed repository
+        shell: bash
         run: |
-          sudo -n systemctl restart motchiy-todo-server.service
-          systemctl is-active --quiet motchiy-todo-server.service
+          set -euo pipefail
+
+          service_dir="$(systemctl show --property=WorkingDirectory --value "$SERVICE_NAME")"
+          if [[ -z "$service_dir" || ! -d "$service_dir" ]]; then
+            echo "$SERVICE_NAME must have a valid WorkingDirectory inside the deployed repository."
+            exit 1
+          fi
+
+          repo_dir="$(git -C "$service_dir" rev-parse --show-toplevel)"
+          if [[ "$(realpath "$service_dir")" != "$(realpath "$repo_dir/server")" ]]; then
+            echo "$SERVICE_NAME WorkingDirectory must point to the repository's server directory."
+            exit 1
+          fi
+          if ! git -C "$repo_dir" remote get-url origin | grep -Fq "$GITHUB_REPOSITORY"; then
+            echo "The service repository's origin does not match $GITHUB_REPOSITORY."
+            exit 1
+          fi
+
+          current_branch="$(git -C "$repo_dir" branch --show-current)"
+          if [[ "$current_branch" != "$DEPLOY_BRANCH" ]]; then
+            echo "Expected the deployed repository to be on $DEPLOY_BRANCH, but found $current_branch."
+            exit 1
+          fi
+
+          echo "DEPLOY_REPO_DIR=$repo_dir" >> "$GITHUB_ENV"
+
+      - name: Fetch and check deployment revision
+        id: fetch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git -C "$DEPLOY_REPO_DIR" fetch --no-tags origin "$DEPLOY_BRANCH"
+          fetched_sha="$(git -C "$DEPLOY_REPO_DIR" rev-parse FETCH_HEAD)"
+          if [[ "$fetched_sha" != "$DEPLOY_SHA" ]]; then
+            echo "Skipping stale deployment for $DEPLOY_SHA; origin/$DEPLOY_BRANCH is now $fetched_sha."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Fast-forward deployed repository
+        if: steps.fetch.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git -C "$DEPLOY_REPO_DIR" pull --ff-only origin "$DEPLOY_BRANCH"
+          deployed_sha="$(git -C "$DEPLOY_REPO_DIR" rev-parse HEAD)"
+          if [[ "$deployed_sha" != "$DEPLOY_SHA" ]]; then
+            echo "Expected $DEPLOY_SHA after pull, but found $deployed_sha."
+            exit 1
+          fi
+
+      - name: Build server
+        if: steps.fetch.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$DEPLOY_REPO_DIR/server"
+          go build -o motchiy-todo-server .
+
+      - name: Restart server and verify it is active
+        if: steps.fetch.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if systemctl is-active --quiet "$SERVICE_NAME"; then
+            echo "$SERVICE_NAME is active before restart"
+          else
+            echo "$SERVICE_NAME is not active; attempting restart"
+          fi
+          sudo -n /usr/bin/systemctl restart "$SERVICE_NAME"
+          systemctl is-active --quiet "$SERVICE_NAME"
+          echo "$SERVICE_NAME is active"

@@ -126,13 +126,13 @@ APIは `http://localhost:11001/todo-app/health` でヘルスチェックでき�
 公開API URLを `https://api.motchiy.com` とする場合は、Cloudflare Tunnelのホスト名を
 ローカルの `http://localhost:11001` に接続してください。公開側のパスにも `/todo-app/` が必要です。
 
-`CI - Gin` は `main` へのpushでテストが成功すると、本番Linuxサーバー上のself-hosted
-GitHub Actions runnerで `server/motchiy-todo-server` をビルドして
-`motchiy-todo-server.service` を再起動します。サービスの `ExecStart` はrunnerの
-チェックアウト内の `server/motchiy-todo-server` を指すよう設定し、runnerユーザーには
-`sudo systemctl restart motchiy-todo-server.service` と
-`sudo systemctl is-active motchiy-todo-server.service` のパスワードなし実行権限が必要です。
-デプロイjobはcheckout時にcleanを行わないため、チェックアウトにある `.env` は保持されます。
+`Gin` workflowは `main` へのpushでテストとビルドが成功すると、`gin`ラベルのself-hosted
+GitHub Actions runner上でデプロイします。`motchiy-todo-server.service` の
+`WorkingDirectory` は既存Git checkout内の `server/` に設定してください。デプロイjobは
+サービスの作業ディレクトリからリポジトリを特定してfast-forward pullし、`server/` で
+`motchiy-todo-server` をビルドしてサービスを再起動します。runnerユーザーには
+`sudo -n /usr/bin/systemctl restart motchiy-todo-server.service` の実行権限が必要です。
+デプロイjobは最新pushのSHAと一致しない場合、古いデプロイをスキップします。
 
 ローカルサーバーへFlutterアプリから接続して試す場合:
 通常の起動では公開APIへ接続します。ローカルAPIを使う場合は、次のように接続先を指定してください。
