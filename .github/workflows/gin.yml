@@ -60,4 +60,4 @@ jobs:
       - name: Restart server
         run: |
           sudo -n systemctl restart motchiy-todo-server.service
-          sudo -n systemctl is-active --quiet motchiy-todo-server.service
+          systemctl is-active --quiet motchiy-todo-server.service
