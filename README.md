@@ -114,6 +114,7 @@ Copy-Item .env.example .env
 [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
 Push-Location server
 go mod tidy
+go test ./...
 go run .
 ```
 
